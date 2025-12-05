@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Contact Maple Brew Coffee - Visit us, send us a message, or find our hours and location.">
+    <title>Contact Us - Maple Brew Coffee</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="index.html" class="logo"><img src="./assets/badge.png" alt="Side Porch Coffee Co."></a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="menu.html">Menu</a></li>
+                <li><a href="coffee-club.html">Coffee Club</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="contact.html">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="section">
+            <h1 class="section-title">Visit Us</h1>
+            <p style="text-align: center; font-size: 1.1rem; color: var(--text-dark); margin-bottom: 3rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+                We'd love to hear from you! Stop by for a cup of coffee, give us a call, or send us a message. We're here to serve you.
+            </p>
+
+            <div class="contact-container">
+                <div class="contact-info">
+                    <h3>Get in Touch</h3>
+                    <p><strong>Address:</strong><br>
+                    4190b Texas 6 Frontage Rd.<br>
+                    College Station, TX 77845</p>
+                    
+                    <p><strong>Phone:</strong><br>
+                    (979) 690-1999</p>
+                    
+                    <p><strong>Email:</strong><br>
+                    <a href="mailto:hello@sideporchcoffee.co" class="email-link">hello@sideporchcoffee.co</a></p>
+
+                    <h3 style="margin-top: 2rem;">Hours</h3>
+                    <ul class="hours-list">
+                        <li><strong>Monday - Friday:</strong> 7:00 AM - 5:00 PM</li>
+                        <li><strong>Saturday:</strong> 7:00 AM - 8:00 PM</li>
+                        <li><strong>Sunday:</strong> Closed</li>
+                    </ul>
+
+                    <p style="margin-top: 1.5rem; font-style: italic; color: var(--auburn);">
+                        *Hours may vary during holidays. Holiday schedules will be updated here and on social media.
+                    </p>
+                </div>
+
+                <form id="contactForm" action="#" method="POST">
+                    <h3 style="margin-bottom: 1.5rem; color: var(--deep-brown);">Send Us a Message</h3>
+                    
+                    <div class="form-group">
+                        <label for="name">Your Name</label>
+                        <input type="text" id="name" name="name" required placeholder="John Doe">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Your Email</label>
+                        <input type="email" id="email" name="email" required placeholder="john@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone (Optional)</label>
+                        <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="subject">Subject</label>
+                        <input type="text" id="subject" name="subject" required placeholder="How can we help?">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="message">Message</label>
+                        <textarea id="message" name="message" required placeholder="Tell us what's on your mind..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" style="width: 100%;">Send Message</button>
+                </form>
+            </div>
+
+            <div class="map-container">
+                <iframe 
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5339.926330024626!2d-96.26998722445869!3d30.56772666649551!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x864685006bb9f75f%3A0x457c306489e03968!2sSide%20Porch%20Coffee%20Co.!5e0!3m2!1sen!2sus!4v1764892388246!5m2!1sen!2sus" 
+                    allowfullscreen="" 
+                    loading="lazy" 
+                    referrerpolicy="no-referrer-when-downgrade"
+                    title="Side Porch Coffee Co. Location">
+                </iframe>
+            </div>
+
+            <div class="content-card" style="margin-top: 3rem; text-align: center;">
+                <h3 style="color: var(--deep-brown); margin-bottom: 1rem;">Follow Us</h3>
+                <p style="margin-bottom: 1.5rem; color: var(--text-dark);">
+                    Stay connected with us on social media for daily specials, community events, and behind-the-scenes glimpses of life at Maple Brew Coffee.
+                </p>
+                <div class="social-links" style="justify-content: center;">
+                    <a href="https://www.instagram.com/sideporchcoffeeco/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="color: var(--deep-brown);">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Side Porch Coffee Co. All rights reserved.</p>
+        <p>Brewed with ❤️ in our small town</p>
+        <p>Site managed by <a href="http://www.jeffreyloehr.com/2KMJ-Studios" class="footer-link">2KMJ-Studios</a></p>
+    </footer>
+
+    <script>
+        // Simple form handling (you'll need to connect this to a backend service)
+        document.getElementById('contactForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form values
+            const formData = {
+                name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value,
+                subject: document.getElementById('subject').value,
+                message: document.getElementById('message').value
+            };
+            
+            // Here you would typically send this to a server
+            // For now, we'll just show an alert
+            alert('Thank you for your message! We\'ll get back to you soon.\n\nNote: This is a demo. In production, this would send an email or save to a database.');
+            
+            // Reset form
+            this.reset();
+        });
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,14 @@
+// Example configuration file
+// Copy this file to config.local.js and add your actual API keys
+// config.local.js is gitignored and will not be committed to version control
+
+window.COFFEE_CLUB_CONFIG = {
+    supabase: {
+        url: 'YOUR_SUPABASE_PROJECT_URL_HERE',
+        anonKey: 'YOUR_SUPABASE_ANON_KEY_HERE'
+    },
+    stripe: {
+        publishableKey: 'YOUR_STRIPE_PUBLISHABLE_KEY_HERE'
+    }
+};
+

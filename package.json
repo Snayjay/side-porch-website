@@ -1,0 +1,23 @@
+{
+  "name": "side-porch-website",
+  "version": "1.0.0",
+  "description": "Side Porch Coffee Co. website with Coffee Club prepay system",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes http-server . -p 8080 -o",
+    "dev": "npx --yes http-server . -p 8080 -o",
+    "supabase": "npx supabase",
+    "supabase:version": "npx supabase --version",
+    "supabase:status": "npx supabase status",
+    "supabase:db:push": "npx supabase db push",
+    "supabase:db:reset": "npx supabase db reset",
+    "supabase:migration:new": "npx supabase migration new",
+    "supabase:migration:list": "npx supabase migration list"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.2"
+  }
+}

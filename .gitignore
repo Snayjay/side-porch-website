@@ -1,0 +1,21 @@
+# Local configuration with API keys (no longer used - keys stored in browser localStorage)
+config.local.js
+
+# One-time setup page (optional, can be deleted)
+setup.html
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
