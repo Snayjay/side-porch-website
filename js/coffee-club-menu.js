@@ -256,12 +256,12 @@ class CoffeeClubMenu {
 
     async checkout() {
         if (!authManager.isAuthenticated()) {
-            alert('Please sign in to checkout');
+            errorDialog.show('Please sign in to checkout', 'Authentication Required');
             return;
         }
 
         if (this.cart.length === 0) {
-            alert('Your cart is empty');
+            errorDialog.show('Your cart is empty', 'Empty Cart');
             return;
         }
 
@@ -269,7 +269,7 @@ class CoffeeClubMenu {
         const totals = this.calculateTotals();
 
         if (balance < totals.total) {
-            alert(`Insufficient balance. You have $${balance.toFixed(2)}, but need $${totals.total.toFixed(2)}. Please fund your account.`);
+            errorDialog.show(`Insufficient balance. You have $${balance.toFixed(2)}, but need $${totals.total.toFixed(2)}. Please fund your account.`, 'Insufficient Balance');
             return;
         }
 
@@ -280,12 +280,12 @@ class CoffeeClubMenu {
         if (result.success) {
             this.cart = [];
             this.updateCartDisplay();
-            alert('Order placed successfully!');
+            errorDialog.showSuccess('Order placed successfully!', 'Order Confirmed');
             // Refresh account balance
             await accountManager.getAccount();
             window.dispatchEvent(new CustomEvent('accountUpdated'));
         } else {
-            alert('Error processing order: ' + result.error);
+            errorDialog.show('Error processing order: ' + (result.error || 'Please try again.'), 'Order Error');
         }
     }
 

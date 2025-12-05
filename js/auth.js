@@ -79,6 +79,7 @@ class AuthManager {
             
             this.currentUser = null;
             localStorage.removeItem('coffeeClubUser');
+            localStorage.removeItem('coffeeClubLastActivity');
             return { success: true };
         } catch (error) {
             console.error('Sign out error:', error);
@@ -93,7 +94,9 @@ class AuthManager {
         }
 
         try {
-            const { data: { user } } = await client.auth.getUser();
+            const { data: { user }, error } = await client.auth.getUser();
+            if (error) throw error;
+            
             if (user) {
                 this.currentUser = user;
                 this.saveUserToStorage();
@@ -103,6 +106,12 @@ class AuthManager {
             console.error('Get user error:', error);
             return null;
         }
+    }
+
+    isEmailVerified() {
+        if (!this.currentUser) return false;
+        // Check if email is confirmed
+        return this.currentUser.email_confirmed_at !== null && this.currentUser.email_confirmed_at !== undefined;
     }
 
     loadUserFromStorage() {
