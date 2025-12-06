@@ -172,18 +172,88 @@
     cursor: not-allowed;
 }
 
-/* Coffee Club Menu Items */
-.coffee-club-item {
-    position: relative;
+/* Coffee Club Menu Items - Line Items */
+.menu-line-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
 }
 
-.add-to-cart-controls {
-    margin-top: 1rem;
+.menu-line-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 1.5rem;
+    align-items: center;
+    padding: 1rem;
+    background: var(--cream);
+    border-radius: 8px;
+    border: 1px solid rgba(139, 111, 71, 0.2);
+    transition: all 0.3s ease;
+}
+
+.menu-line-item:hover {
+    background: var(--parchment);
+    border-color: var(--accent-orange);
+    box-shadow: 0 4px 12px rgba(92, 64, 51, 0.1);
+}
+
+.menu-line-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.menu-item-name-text {
+    font-weight: 600;
+    color: var(--deep-brown);
+    font-size: 1rem;
+}
+
+.menu-item-description {
+    font-size: 0.85rem;
+    color: var(--text-dark);
+    opacity: 0.7;
+    line-height: 1.4;
+}
+
+.menu-line-item-price {
+    font-weight: 600;
+    color: var(--auburn);
+    font-size: 1.1rem;
+    white-space: nowrap;
+}
+
+.menu-line-item-action {
+    white-space: nowrap;
 }
 
 .btn-sm {
     padding: 0.5rem 1.5rem;
     font-size: 0.9rem;
+}
+
+/* Cart Customizations */
+.cart-item-customizations {
+    line-height: 1.4;
+}
+
+/* Customization Modal Styles */
+.customization-modal-overlay {
+    z-index: 10003;
+}
+
+.customization-modal-close:hover {
+    color: var(--auburn) !important;
+}
+
+.customization-item {
+    transition: all 0.2s ease;
+}
+
+.customization-item:hover {
+    background: var(--parchment) !important;
+    border-color: var(--accent-orange) !important;
 }
 
 /* Order History */

@@ -33,18 +33,65 @@ class StripeManager {
     }
 
     async createPaymentIntent(amount, accountId) {
-        // In a real implementation, this would call your backend API
-        // For now, we'll simulate it
-        // You'll need to create a backend endpoint that:
-        // 1. Creates a Stripe PaymentIntent
-        // 2. Records the transaction in Supabase
-        // 3. Returns the client_secret
+        // Try to call backend endpoint (Supabase Edge Function or other API)
+        const supabaseConfig = configManager.getSupabaseConfig();
+        const supabaseClient = getSupabaseClient();
         
-        // Mock implementation - replace with actual API call
-        return {
-            clientSecret: 'mock_client_secret_' + Date.now(),
-            paymentIntentId: 'pi_mock_' + Date.now()
-        };
+        if (supabaseConfig?.url && supabaseClient) {
+            try {
+                // Get current session for authentication
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (!session) {
+                    throw new Error('Not authenticated');
+                }
+
+                // Try calling Supabase Edge Function
+                const response = await fetch(
+                    `${supabaseConfig.url}/functions/v1/create-payment-intent`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'apikey': supabaseConfig.anonKey || ''
+                        },
+                        body: JSON.stringify({
+                            amount: amount,
+                            accountId: accountId
+                        })
+                    }
+                );
+
+                if (response.ok) {
+                    const data = await response.json();
+                    return {
+                        clientSecret: data.clientSecret,
+                        paymentIntentId: data.paymentIntentId
+                    };
+                } else {
+                    // If endpoint doesn't exist, fall through to error message
+                    const error = await response.json().catch(() => ({ error: 'Backend endpoint not found' }));
+                    throw new Error(error.error || 'Backend endpoint returned an error');
+                }
+            } catch (error) {
+                // If fetch fails (endpoint doesn't exist), show helpful error
+                if (error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
+                    throw new Error(
+                        'Backend endpoint not found. Please create a Supabase Edge Function or other backend endpoint. ' +
+                        'See supabase-edge-function-example.md for setup instructions.'
+                    );
+                }
+                throw error;
+            }
+        }
+        
+        // If no backend configured, throw helpful error
+        throw new Error(
+            'Backend endpoint required: Please create a backend API endpoint to create Stripe PaymentIntents. ' +
+            'The endpoint should call Stripe API with your secret key to create a PaymentIntent and return the client_secret. ' +
+            'See supabase-edge-function-example.md for setup instructions or visit: ' +
+            'https://stripe.com/docs/payments/accept-a-payment#web-create-payment-intent'
+        );
     }
 
     async confirmPayment(clientSecret, paymentMethod) {

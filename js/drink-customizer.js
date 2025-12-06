@@ -1,0 +1,387 @@
+// Drink Customization Component
+// Handles the customization dialog for drinks
+
+class DrinkCustomizer {
+    constructor() {
+        this.ingredients = [];
+        this.drinkIngredients = {}; // Map of product_id to default ingredients
+        this.loadIngredients();
+    }
+
+    async loadIngredients() {
+        const client = getSupabaseClient();
+        if (!client) {
+            // Use mock ingredients if Supabase not configured
+            this.ingredients = this.getMockIngredients();
+            return;
+        }
+
+        try {
+            const { data, error } = await client
+                .from('ingredients')
+                .select('*')
+                .eq('available', true)
+                .order('category', { ascending: true })
+                .order('name', { ascending: true });
+
+            if (error) throw error;
+            this.ingredients = data || this.getMockIngredients();
+        } catch (error) {
+            console.error('Load ingredients error:', error);
+            this.ingredients = this.getMockIngredients();
+        }
+    }
+
+    getMockIngredients() {
+        return [
+            { id: '1', name: 'Espresso Shot', category: 'espresso', unit_type: 'shots', unit_cost: 0.75 },
+            { id: '2', name: 'Vanilla Syrup', category: 'syrup', unit_type: 'pumps', unit_cost: 0.25 },
+            { id: '3', name: 'Caramel Syrup', category: 'syrup', unit_type: 'pumps', unit_cost: 0.25 },
+            { id: '4', name: 'Hazelnut Syrup', category: 'syrup', unit_type: 'pumps', unit_cost: 0.25 },
+            { id: '5', name: 'Maple Syrup', category: 'syrup', unit_type: 'pumps', unit_cost: 0.30 },
+            { id: '6', name: 'Pumpkin Spice Syrup', category: 'syrup', unit_type: 'pumps', unit_cost: 0.30 },
+            { id: '7', name: 'Steamed Milk', category: 'liquid', unit_type: 'oz', unit_cost: 0.10 },
+            { id: '8', name: 'Oat Milk', category: 'liquid', unit_type: 'oz', unit_cost: 0.12 },
+            { id: '9', name: 'Almond Milk', category: 'liquid', unit_type: 'oz', unit_cost: 0.12 },
+            { id: '10', name: 'Sugar', category: 'sweetener', unit_type: 'tsp', unit_cost: 0.00 },
+            { id: '11', name: 'Stevia', category: 'sweetener', unit_type: 'packets', unit_cost: 0.00 },
+            { id: '12', name: 'Whipped Cream', category: 'topping', unit_type: 'count', unit_cost: 0.50 },
+            { id: '13', name: 'Toasted Pecans', category: 'topping', unit_type: 'count', unit_cost: 0.50 }
+        ];
+    }
+
+    async loadDrinkIngredients(productId) {
+        const client = getSupabaseClient();
+        if (!client) {
+            // Return empty for now - can add mock data later
+            return {};
+        }
+
+        try {
+            const { data, error } = await client
+                .from('drink_ingredients')
+                .select(`
+                    *,
+                    ingredient:ingredients(*)
+                `)
+                .eq('product_id', productId);
+
+            if (error) throw error;
+            
+            const ingredientsMap = {};
+            (data || []).forEach(di => {
+                ingredientsMap[di.ingredient_id] = {
+                    defaultAmount: parseFloat(di.default_amount),
+                    isRequired: di.is_required,
+                    isRemovable: di.is_removable,
+                    isAddable: di.is_addable,
+                    ingredient: di.ingredient
+                };
+            });
+            return ingredientsMap;
+        } catch (error) {
+            console.error('Load drink ingredients error:', error);
+            return {};
+        }
+    }
+
+    showCustomizationDialog(product, onConfirm) {
+        this.currentProduct = product;
+        this.onConfirmCallback = onConfirm;
+        this.customizations = {}; // Map of ingredient_id to amount
+        this.basePrice = parseFloat(product.price);
+
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'customization-modal-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10003;
+            backdrop-filter: blur(3px);
+            animation: fadeIn 0.2s ease;
+            padding: 1rem;
+            overflow-y: auto;
+        `;
+
+        const modal = document.createElement('div');
+        modal.className = 'customization-modal';
+        modal.style.cssText = `
+            background: var(--parchment);
+            border-radius: 15px;
+            padding: 0;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            animation: slideDown 0.3s ease;
+            border: 2px solid var(--accent-orange);
+            display: flex;
+            flex-direction: column;
+        `;
+
+        modal.innerHTML = `
+            <div style="padding: 1.5rem; border-bottom: 2px solid rgba(139, 111, 71, 0.2); flex-shrink: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0; color: var(--deep-brown);">Customize ${product.name}</h2>
+                    <button class="customization-modal-close" style="background: none; border: none; font-size: 2rem; color: var(--text-dark); cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease;" onclick="this.closest('.customization-modal-overlay').remove()">&times;</button>
+                </div>
+                <p style="margin: 0.5rem 0 0 0; color: var(--text-dark); opacity: 0.8; font-size: 0.9rem;">${product.description || ''}</p>
+            </div>
+            <div id="customization-content" style="padding: 1.5rem; overflow-y: auto; flex: 1;">
+                <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading ingredients...</p>
+            </div>
+            <div style="padding: 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 1.2rem; font-weight: 600; color: var(--deep-brown);">
+                        Total: $<span id="customization-total">${this.basePrice.toFixed(2)}</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.25rem;">
+                        Base: $${this.basePrice.toFixed(2)}
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-secondary" onclick="this.closest('.customization-modal-overlay').remove()">Cancel</button>
+                    <button class="btn" id="add-customized-btn" onclick="drinkCustomizer.confirmCustomization()">Add to Cart</button>
+                </div>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        this.modal = overlay;
+
+        // Load drink ingredients and render
+        this.loadDrinkIngredients(product.id).then(drinkIngredients => {
+            this.drinkIngredients = drinkIngredients;
+            this.renderCustomizationContent();
+        });
+
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
+
+        // Close on Escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                overlay.remove();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+        document.body.style.overflow = 'hidden';
+    }
+
+    renderCustomizationContent() {
+        const content = this.modal.querySelector('#customization-content');
+        if (!content) return;
+
+        // Group ingredients by category
+        const categories = {
+            espresso: { name: '☕ Espresso', ingredients: [] },
+            syrup: { name: '🍯 Syrups', ingredients: [] },
+            liquid: { name: '🥛 Liquids', ingredients: [] },
+            sweetener: { name: '🍬 Sweeteners', ingredients: [] },
+            topping: { name: '✨ Toppings', ingredients: [] },
+            milk: { name: '🥛 Milk Options', ingredients: [] },
+            other: { name: '➕ Other', ingredients: [] }
+        };
+
+        this.ingredients.forEach(ingredient => {
+            const category = categories[ingredient.category] || categories.other;
+            category.ingredients.push(ingredient);
+        });
+
+        // Initialize customizations with default amounts
+        this.ingredients.forEach(ingredient => {
+            const drinkIng = this.drinkIngredients[ingredient.id];
+            if (drinkIng) {
+                this.customizations[ingredient.id] = drinkIng.defaultAmount;
+            } else {
+                this.customizations[ingredient.id] = 0;
+            }
+        });
+
+        let html = '';
+
+        Object.values(categories).forEach(category => {
+            if (category.ingredients.length === 0) return;
+
+            html += `<div style="margin-bottom: 2rem;">`;
+            html += `<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.1rem;">${category.name}</h3>`;
+
+            category.ingredients.forEach(ingredient => {
+                const drinkIng = this.drinkIngredients[ingredient.id];
+                const currentAmount = this.customizations[ingredient.id] || 0;
+                const isRequired = drinkIng?.isRequired || false;
+                const isRemovable = drinkIng?.isRemovable !== false;
+                const isAddable = drinkIng?.isAddable !== false;
+                const unitLabel = this.getUnitLabel(ingredient.unit_type);
+                const cost = parseFloat(ingredient.unit_cost) * currentAmount;
+
+                html += `
+                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--cream); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(139, 111, 71, 0.2);">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">
+                                ${ingredient.name}
+                                ${isRequired ? '<span style="color: var(--auburn); font-size: 0.85rem;"> (required)</span>' : ''}
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">
+                                ${unitLabel} • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(ingredient.unit_type)}
+                                ${cost > 0 ? ` • $${cost.toFixed(2)}` : ''}
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            ${isRemovable && currentAmount > 0 ? `
+                                <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', -1)" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
+                            ` : '<div style="width: 30px;"></div>'}
+                            <span style="min-width: 40px; text-align: center; font-weight: 600; color: var(--deep-brown);">${currentAmount > 0 ? currentAmount : '0'}</span>
+                            ${isAddable ? `
+                                <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', 1)" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
+                            ` : '<div style="width: 30px;"></div>'}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+        });
+
+        content.innerHTML = html;
+        this.updateTotal();
+    }
+
+    adjustIngredient(ingredientId, delta) {
+        const ingredient = this.ingredients.find(i => i.id === ingredientId);
+        if (!ingredient) return;
+
+        const drinkIng = this.drinkIngredients[ingredientId];
+        const isRequired = drinkIng?.isRequired || false;
+        const currentAmount = this.customizations[ingredientId] || 0;
+        const newAmount = Math.max(0, currentAmount + delta);
+
+        // Don't allow removing required ingredients below their default amount
+        if (isRequired && drinkIng) {
+            const minAmount = drinkIng.defaultAmount;
+            if (newAmount < minAmount) return;
+        }
+
+        this.customizations[ingredientId] = newAmount;
+        this.renderCustomizationContent();
+    }
+
+    updateTotal() {
+        let total = this.basePrice;
+
+        this.ingredients.forEach(ingredient => {
+            const amount = this.customizations[ingredient.id] || 0;
+            const drinkIng = this.drinkIngredients[ingredient.id];
+            
+            if (drinkIng) {
+                // Calculate cost difference from default
+                const defaultAmount = drinkIng.defaultAmount || 0;
+                const difference = amount - defaultAmount;
+                total += difference * parseFloat(ingredient.unit_cost);
+            } else {
+                // New ingredient addition
+                total += amount * parseFloat(ingredient.unit_cost);
+            }
+        });
+
+        const totalElement = this.modal.querySelector('#customization-total');
+        if (totalElement) {
+            totalElement.textContent = total.toFixed(2);
+        }
+    }
+
+    getUnitLabel(unitType) {
+        const labels = {
+            'shots': 'Shots',
+            'pumps': 'Pumps',
+            'oz': 'Ounces',
+            'tsp': 'Teaspoons',
+            'packets': 'Packets',
+            'count': 'Count'
+        };
+        return labels[unitType] || unitType;
+    }
+
+    getUnitAbbreviation(unitType) {
+        const abbrevs = {
+            'shots': 'shot',
+            'pumps': 'pump',
+            'oz': 'oz',
+            'tsp': 'tsp',
+            'packets': 'packet',
+            'count': ''
+        };
+        return abbrevs[unitType] || unitType;
+    }
+
+    confirmCustomization() {
+        if (this.onConfirmCallback) {
+            const customizations = [];
+            let priceAdjustment = 0;
+
+            this.ingredients.forEach(ingredient => {
+                const amount = this.customizations[ingredient.id] || 0;
+                const drinkIng = this.drinkIngredients[ingredient.id];
+                
+                if (drinkIng) {
+                    const defaultAmount = drinkIng.defaultAmount || 0;
+                    const difference = amount - defaultAmount;
+                    if (difference !== 0) {
+                        customizations.push({
+                            ingredientId: ingredient.id,
+                            ingredientName: ingredient.name,
+                            amount: amount,
+                            defaultAmount: defaultAmount,
+                            difference: difference,
+                            unitType: ingredient.unit_type,
+                            cost: difference * parseFloat(ingredient.unit_cost)
+                        });
+                        priceAdjustment += difference * parseFloat(ingredient.unit_cost);
+                    }
+                } else if (amount > 0) {
+                    // New ingredient added
+                    customizations.push({
+                        ingredientId: ingredient.id,
+                        ingredientName: ingredient.name,
+                        amount: amount,
+                        defaultAmount: 0,
+                        difference: amount,
+                        unitType: ingredient.unit_type,
+                        cost: amount * parseFloat(ingredient.unit_cost)
+                    });
+                    priceAdjustment += amount * parseFloat(ingredient.unit_cost);
+                }
+            });
+
+            const finalPrice = this.basePrice + priceAdjustment;
+
+            this.onConfirmCallback({
+                product: this.currentProduct,
+                customizations: customizations,
+                priceAdjustment: priceAdjustment,
+                finalPrice: finalPrice
+            });
+
+            this.modal.remove();
+            document.body.style.overflow = '';
+        }
+    }
+}
+
+// Global instance
+const drinkCustomizer = new DrinkCustomizer();
+

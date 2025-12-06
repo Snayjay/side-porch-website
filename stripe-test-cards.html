@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stripe Test Cards - Reference</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .test-card-container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 2rem;
+        }
+        .test-card-item {
+            background: var(--cream);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-orange);
+            box-shadow: 0 4px 12px rgba(92, 64, 51, 0.1);
+        }
+        .test-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .test-card-name {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--deep-brown);
+            margin: 0;
+        }
+        .copy-btn {
+            background: var(--accent-orange);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        .copy-btn:hover {
+            background: var(--burnt-orange);
+            transform: translateY(-2px);
+        }
+        .copy-btn.copied {
+            background: #28a745;
+        }
+        .test-card-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .detail-item {
+            background: white;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border: 1px solid rgba(139, 111, 71, 0.2);
+        }
+        .detail-label {
+            font-size: 0.85rem;
+            color: var(--text-dark);
+            opacity: 0.7;
+            margin-bottom: 0.25rem;
+        }
+        .detail-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--deep-brown);
+            font-family: 'Courier New', monospace;
+        }
+        .copy-icon {
+            width: 16px;
+            height: 16px;
+        }
+        .note {
+            background: rgba(160, 82, 45, 0.1);
+            border-left: 4px solid var(--auburn);
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: 6px;
+        }
+        .note p {
+            margin: 0;
+            color: var(--text-dark);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="index.html" class="logo"><img src="./assets/badge.png" alt="Side Porch Coffee Co."></a>
+            <ul class="nav-links">
+                <li><a href="coffee-club.html">← Back to Coffee Club</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="section">
+            <div class="test-card-container">
+                <h1 class="section-title">Stripe Test Cards Reference</h1>
+                
+                <div class="note">
+                    <p><strong>⚠️ Test Mode Only:</strong> These cards only work with Stripe test mode (keys starting with <code>pk_test_</code>). Never use real credit card information in test mode. All transactions are simulated and no real charges occur.</p>
+                </div>
+
+                <!-- Success Card -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">✅ Success</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4242424242424242', '12/34', '123', '12345', 'Success')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to simulate a successful payment.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4242424242424242', this)">4242 4242 4242 4242</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Decline Card -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">❌ Decline (Generic)</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4000000000000002', '12/34', '123', '12345', 'Decline')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to simulate a declined payment.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4000000000000002', this)">4000 0000 0000 0002</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Insufficient Funds -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">💳 Insufficient Funds</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4000000000009995', '12/34', '123', '12345', 'Insufficient Funds')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to simulate insufficient funds.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4000000000009995', this)">4000 0000 0000 9995</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lost Card -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">🔍 Lost Card</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4000000000009987', '12/34', '123', '12345', 'Lost Card')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to simulate a lost card error.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4000000000009987', this)">4000 0000 0000 9987</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stolen Card -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">🚨 Stolen Card</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4000000000009979', '12/34', '123', '12345', 'Stolen Card')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to simulate a stolen card error.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4000000000009979', this)">4000 0000 0000 9979</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Requires Authentication -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">🔐 Requires Authentication (3D Secure)</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4000002500003155', '12/34', '123', '12345', 'Requires Authentication')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to test 3D Secure authentication flow.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4000002500003155', this)">4000 0025 0000 3155</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Error -->
+                <div class="test-card-item">
+                    <div class="test-card-header">
+                        <h3 class="test-card-name">⚠️ Processing Error</h3>
+                        <button class="copy-btn" onclick="copyCardInfo('4000000000000119', '12/34', '123', '12345', 'Processing Error')">
+                            <svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy All
+                        </button>
+                    </div>
+                    <p style="color: var(--text-dark); margin-bottom: 1rem;">Use this card to simulate a processing error.</p>
+                    <div class="test-card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Card Number</div>
+                            <div class="detail-value" onclick="copyText('4000000000000119', this)">4000 0000 0000 0119</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Expiry</div>
+                            <div class="detail-value" onclick="copyText('12/34', this)">12/34</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">CVC</div>
+                            <div class="detail-value" onclick="copyText('123', this)">123</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ZIP</div>
+                            <div class="detail-value" onclick="copyText('12345', this)">12345</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="note" style="margin-top: 2rem;">
+                    <p><strong>💡 Tip:</strong> Click on any individual field to copy just that value, or use the "Copy All" button to copy all card details at once. For expiry, CVC, and ZIP, you can use any valid format - Stripe will accept them in test mode.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 <a href="http://www.jeffreyloehr.com/2KMJ-Studios" class="footer-link">2KMJ-Studios</a>. All rights reserved.</p>
+        <p>Brewed with ❤️ in our small town</p>
+    </footer>
+
+    <script>
+        function copyText(text, element) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = element.textContent;
+                element.textContent = 'Copied!';
+                element.style.color = '#28a745';
+                setTimeout(() => {
+                    element.textContent = originalText;
+                    element.style.color = '';
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+
+        function copyCardInfo(cardNumber, expiry, cvc, zip, cardName) {
+            const cardInfo = `Card Number: ${cardNumber}\nExpiry: ${expiry}\nCVC: ${cvc}\nZIP: ${zip}`;
+            navigator.clipboard.writeText(cardInfo).then(() => {
+                const buttons = document.querySelectorAll('.copy-btn');
+                buttons.forEach(btn => {
+                    if (btn.textContent.includes(cardName) || btn.onclick.toString().includes(cardName)) {
+                        btn.classList.add('copied');
+                        const originalText = btn.innerHTML;
+                        btn.innerHTML = '<svg class="copy-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copied!';
+                        setTimeout(() => {
+                            btn.classList.remove('copied');
+                            btn.innerHTML = originalText;
+                        }, 2000);
+                    }
+                });
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+    </script>
+</body>
+</html>
+

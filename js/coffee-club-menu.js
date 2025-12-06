@@ -94,18 +94,30 @@ class CoffeeClubMenu {
 
             html += `<div class="menu-category">`;
             html += `<h2>${category.name}</h2>`;
-            html += `<div class="menu-grid">`;
+            html += `<div class="menu-line-items">`;
 
             category.products.forEach(product => {
+                const isDrink = product.category === 'drink';
+                const description = product.description || '';
+                const productId = product.id;
+                
                 html += `
-                    <div class="menu-item coffee-club-item">
-                        <h3>${product.name}</h3>
-                        <p class="description">${product.description || ''}</p>
-                        <p class="price">$${product.price.toFixed(2)}</p>
-                        <div class="add-to-cart-controls">
-                            <button class="btn btn-sm" onclick="coffeeClubMenu.addToCart('${product.id}')">
-                                Add to Cart
-                            </button>
+                    <div class="menu-line-item" data-product-id="${productId}">
+                        <div class="menu-line-item-info">
+                            <div class="menu-item-name-text">${product.name}</div>
+                            ${description ? `<div class="menu-item-description">${description}</div>` : ''}
+                        </div>
+                        <div class="menu-line-item-price">$${product.price.toFixed(2)}</div>
+                        <div class="menu-line-item-action">
+                            ${isDrink ? `
+                                <button class="btn btn-sm" onclick="coffeeClubMenu.customizeDrink('${productId}')">
+                                    Customize
+                                </button>
+                            ` : `
+                                <button class="btn btn-sm" onclick="coffeeClubMenu.addToCart('${productId}')">
+                                    Add
+                                </button>
+                            `}
                         </div>
                     </div>
                 `;
@@ -117,21 +129,70 @@ class CoffeeClubMenu {
         container.innerHTML = html;
     }
 
+    customizeDrink(productId) {
+        const product = this.products.find(p => p.id === productId);
+        if (!product) return;
+
+        drinkCustomizer.showCustomizationDialog(product, (customizedDrink) => {
+            this.addCustomizedDrinkToCart(customizedDrink);
+        });
+    }
+
+    addCustomizedDrinkToCart(customizedDrink) {
+        const { product, customizations, priceAdjustment, finalPrice } = customizedDrink;
+        
+        // Create a unique cart item ID that includes customizations
+        const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        this.cart.push({
+            cartItemId: cartItemId,
+            productId: product.id,
+            name: product.name,
+            category: product.category,
+            basePrice: parseFloat(product.price),
+            priceAdjustment: priceAdjustment,
+            finalPrice: finalPrice,
+            taxRate: parseFloat(product.tax_rate),
+            quantity: 1,
+            customizations: customizations
+        });
+
+        this.updateCartDisplay();
+        this.showCartNotification();
+    }
+
     addToCart(productId) {
         const product = this.products.find(p => p.id === productId);
         if (!product) return;
 
-        const existingItem = this.cart.find(item => item.productId === productId);
+        // For drinks, show customization dialog instead
+        if (product.category === 'drink') {
+            this.customizeDrink(productId);
+            return;
+        }
+
+        // For non-drinks, add directly
+        const existingItem = this.cart.find(item => 
+            item.productId === productId && 
+            !item.customizations && 
+            item.customizations?.length === 0
+        );
+        
         if (existingItem) {
             existingItem.quantity += 1;
         } else {
+            const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             this.cart.push({
+                cartItemId: cartItemId,
                 productId: productId,
                 name: product.name,
                 category: product.category,
-                price: parseFloat(product.price),
+                basePrice: parseFloat(product.price),
+                priceAdjustment: 0,
+                finalPrice: parseFloat(product.price),
                 taxRate: parseFloat(product.tax_rate),
-                quantity: 1
+                quantity: 1,
+                customizations: []
             });
         }
 
@@ -139,16 +200,16 @@ class CoffeeClubMenu {
         this.showCartNotification();
     }
 
-    removeFromCart(productId) {
-        this.cart = this.cart.filter(item => item.productId !== productId);
+    removeFromCart(cartItemId) {
+        this.cart = this.cart.filter(item => item.cartItemId !== cartItemId);
         this.updateCartDisplay();
     }
 
-    updateQuantity(productId, quantity) {
-        const item = this.cart.find(item => item.productId === productId);
+    updateQuantity(cartItemId, quantity) {
+        const item = this.cart.find(item => item.cartItemId === cartItemId);
         if (item) {
             if (quantity <= 0) {
-                this.removeFromCart(productId);
+                this.removeFromCart(cartItemId);
             } else {
                 item.quantity = quantity;
                 this.updateCartDisplay();
@@ -161,7 +222,8 @@ class CoffeeClubMenu {
         let totalTax = 0;
 
         this.cart.forEach(item => {
-            const itemSubtotal = item.price * item.quantity;
+            const itemPrice = item.finalPrice || item.basePrice || item.price || 0;
+            const itemSubtotal = itemPrice * item.quantity;
             const itemTax = itemSubtotal * item.taxRate;
             subtotal += itemSubtotal;
             totalTax += itemTax;
@@ -189,21 +251,42 @@ class CoffeeClubMenu {
         let html = '<div class="cart-items">';
 
         this.cart.forEach(item => {
-            const itemSubtotal = item.price * item.quantity;
+            const itemPrice = item.finalPrice || item.basePrice || item.price || 0;
+            const itemSubtotal = itemPrice * item.quantity;
             const itemTax = itemSubtotal * item.taxRate;
             const itemTotal = itemSubtotal + itemTax;
+            const hasCustomizations = item.customizations && item.customizations.length > 0;
 
             html += `
                 <div class="cart-item">
-                    <div class="cart-item-info">
+                    <div class="cart-item-info" style="flex: 1;">
                         <h4>${item.name}</h4>
-                        <p class="cart-item-price">$${item.price.toFixed(2)} × ${item.quantity}</p>
+                        ${hasCustomizations ? `
+                            <div class="cart-item-customizations" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-dark); opacity: 0.8;">
+                                ${item.customizations.map(cust => {
+                                    const sign = cust.difference > 0 ? '+' : '';
+                                    const unitLabel = cust.unitType === 'shots' ? 'shot' : 
+                                                     cust.unitType === 'pumps' ? 'pump' :
+                                                     cust.unitType === 'oz' ? 'oz' :
+                                                     cust.unitType === 'tsp' ? 'tsp' :
+                                                     cust.unitType === 'packets' ? 'packet' : '';
+                                    return `${sign}${cust.difference} ${unitLabel} ${cust.ingredientName}`;
+                                }).join(', ')}
+                            </div>
+                        ` : ''}
+                        <p class="cart-item-price">
+                            $${itemPrice.toFixed(2)} × ${item.quantity}
+                            ${item.priceAdjustment && item.priceAdjustment !== 0 ? 
+                                ` <span style="color: ${item.priceAdjustment > 0 ? 'var(--auburn)' : '#28a745'};">
+                                    (${item.priceAdjustment > 0 ? '+' : ''}$${item.priceAdjustment.toFixed(2)})
+                                </span>` : ''}
+                        </p>
                     </div>
                     <div class="cart-item-controls">
-                        <button class="qty-btn" onclick="coffeeClubMenu.updateQuantity('${item.productId}', ${item.quantity - 1})">-</button>
+                        <button class="qty-btn" onclick="coffeeClubMenu.updateQuantity('${item.cartItemId}', ${item.quantity - 1})">-</button>
                         <span class="qty-display">${item.quantity}</span>
-                        <button class="qty-btn" onclick="coffeeClubMenu.updateQuantity('${item.productId}', ${item.quantity + 1})">+</button>
-                        <button class="remove-btn" onclick="coffeeClubMenu.removeFromCart('${item.productId}')">×</button>
+                        <button class="qty-btn" onclick="coffeeClubMenu.updateQuantity('${item.cartItemId}', ${item.quantity + 1})">+</button>
+                        <button class="remove-btn" onclick="coffeeClubMenu.removeFromCart('${item.cartItemId}')">×</button>
                     </div>
                     <div class="cart-item-total">$${itemTotal.toFixed(2)}</div>
                 </div>

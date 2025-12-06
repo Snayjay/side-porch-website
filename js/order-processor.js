@@ -31,8 +31,9 @@ class OrderProcessor {
             if (orderError) throw orderError;
 
             // Create order items
-            const orderItems = cartItems.map(item => {
-                const itemSubtotal = item.price * item.quantity;
+            const orderItemsData = cartItems.map(item => {
+                const itemPrice = item.finalPrice || item.basePrice || item.price || 0;
+                const itemSubtotal = itemPrice * item.quantity;
                 const itemTax = itemSubtotal * item.taxRate;
                 const itemTotal = itemSubtotal + itemTax;
 
@@ -42,19 +43,49 @@ class OrderProcessor {
                     product_name: item.name,
                     product_category: item.category,
                     quantity: item.quantity,
-                    unit_price: item.price,
+                    unit_price: itemPrice,
                     tax_rate: item.taxRate,
                     tax_amount: itemTax,
                     subtotal: itemSubtotal,
-                    total: itemTotal
+                    total: itemTotal,
+                    customizations: item.customizations || [] // Store customizations for reference
                 };
             });
 
-            const { error: itemsError } = await client
+            const { data: insertedItems, error: itemsError } = await client
                 .from('order_items')
-                .insert(orderItems);
+                .insert(orderItemsData)
+                .select();
 
             if (itemsError) throw itemsError;
+
+            // Save customizations for each order item
+            const customizationsToInsert = [];
+            insertedItems.forEach((orderItem, index) => {
+                const cartItem = cartItems[index];
+                if (cartItem.customizations && cartItem.customizations.length > 0) {
+                    cartItem.customizations.forEach(cust => {
+                        customizationsToInsert.push({
+                            order_item_id: orderItem.id,
+                            ingredient_id: cust.ingredientId,
+                            amount: cust.amount,
+                            action: cust.difference > 0 ? 'add' : (cust.difference < 0 ? 'remove' : 'modify'),
+                            cost_adjustment: cust.cost
+                        });
+                    });
+                }
+            });
+
+            if (customizationsToInsert.length > 0) {
+                const { error: custError } = await client
+                    .from('order_item_customizations')
+                    .insert(customizationsToInsert);
+
+                if (custError) {
+                    console.error('Error saving customizations:', custError);
+                    // Don't fail the order if customizations fail to save
+                }
+            }
 
             // Create purchase transaction
             const { error: transactionError } = await client

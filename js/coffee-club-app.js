@@ -66,10 +66,18 @@ class CoffeeClubApp {
         }
 
         const configWarning = !configManager.isSupabaseConfigured() ? `
-            <div style="background: rgba(160, 82, 45, 0.1); border: 1px solid var(--auburn); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
-                <p style="color: var(--auburn); margin: 0; text-align: center;">
-                    ⚠️ Coffee Club is not configured. Please contact the administrator.
-                </p>
+            <div style="background: rgba(160, 82, 45, 0.1); border: 1px solid var(--auburn); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;">
+                <div style="text-align: center;">
+                    <p style="color: var(--auburn); margin: 0 0 1rem 0; font-weight: 600;">
+                        ⚠️ Coffee Club is not configured
+                    </p>
+                    <p style="color: var(--text-dark); margin: 0 0 1rem 0; font-size: 0.9rem;">
+                        Please configure your API keys to use Coffee Club features.
+                    </p>
+                    <button class="btn" onclick="secretsDialog.show()" style="padding: 0.75rem 1.5rem; font-size: 0.95rem;">
+                        🔐 Configure API Keys
+                    </button>
+                </div>
             </div>
         ` : '';
 
@@ -292,10 +300,18 @@ class CoffeeClubApp {
         document.getElementById('order-history-section').style.display = 'none';
         
         const configWarning = !configManager.isSupabaseConfigured() ? `
-            <div style="background: rgba(160, 82, 45, 0.1); border: 1px solid var(--auburn); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
-                <p style="color: var(--auburn); margin: 0; text-align: center;">
-                    ⚠️ Coffee Club is not configured. Please contact the administrator.
-                </p>
+            <div style="background: rgba(160, 82, 45, 0.1); border: 1px solid var(--auburn); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;">
+                <div style="text-align: center;">
+                    <p style="color: var(--auburn); margin: 0 0 1rem 0; font-weight: 600;">
+                        ⚠️ Coffee Club is not configured
+                    </p>
+                    <p style="color: var(--text-dark); margin: 0 0 1rem 0; font-size: 0.9rem;">
+                        Please configure your API keys to use Coffee Club features.
+                    </p>
+                    <button class="btn" onclick="secretsDialog.show()" style="padding: 0.75rem 1.5rem; font-size: 0.95rem;">
+                        🔐 Configure API Keys
+                    </button>
+                </div>
             </div>
         ` : '';
 
@@ -591,6 +607,14 @@ class CoffeeClubApp {
                     </button>
                 `).join('')}
             </div>
+            <div style="text-align: right; margin-top: 1rem;">
+                <button onclick="testCardsModal.show()" style="background: none; border: none; color: var(--auburn); text-decoration: none; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0; transition: color 0.3s ease;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                    Test Cards Reference
+                </button>
+            </div>
             <div id="funding-payment-form" style="display: none; margin-top: 2rem;">
                 <h3>Payment Information</h3>
                 <div id="card-element" style="margin: 1rem 0;">
@@ -659,11 +683,27 @@ class CoffeeClubApp {
             return;
         }
 
-        // Create payment intent (in real app, this would call your backend)
-        const paymentIntentResult = await stripeManager.createPaymentIntent(
-            this.fundingAmount,
-            authManager.currentUser.id
-        );
+        // Create payment intent - requires backend endpoint
+        let paymentIntentResult;
+        try {
+            paymentIntentResult = await stripeManager.createPaymentIntent(
+                this.fundingAmount,
+                authManager.currentUser.id
+            );
+        } catch (error) {
+            errorDialog.show(
+                error.message + '<br><br>' +
+                '<strong>Setup Required:</strong><br>' +
+                'You need to create a backend endpoint that creates Stripe PaymentIntents. ' +
+                'Options include:<br>' +
+                '• Supabase Edge Function<br>' +
+                '• Serverless function (Vercel, Netlify, etc.)<br>' +
+                '• Your own backend API<br><br>' +
+                'The endpoint should use your Stripe secret key to create a PaymentIntent and return the client_secret.',
+                'Backend Endpoint Required'
+            );
+            return;
+        }
 
         // Confirm payment
         const paymentResult = await stripeManager.confirmPayment(

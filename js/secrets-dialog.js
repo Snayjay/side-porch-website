@@ -122,7 +122,7 @@ class SecretsDialog {
         return {};
     }
 
-    save(event) {
+    async save(event) {
         event.preventDefault();
         const errorDiv = document.getElementById('secrets-error');
         errorDiv.style.display = 'none';
@@ -160,13 +160,13 @@ class SecretsDialog {
             return;
         }
 
-        // Save to localStorage (secure, browser-only storage)
-        try {
-            localStorage.setItem('coffeeClubConfig', JSON.stringify(finalConfig));
-            
-            // Update config manager
-            configManager.config = finalConfig;
-            
+        // Update config manager
+        configManager.config = finalConfig;
+        
+        // Save to database (master record) and localStorage (backup)
+        const saveResult = await configManager.saveToDatabase();
+        
+        if (saveResult.success) {
             // Show success message
             this.showSuccess();
             
@@ -176,8 +176,18 @@ class SecretsDialog {
                 // Reload page to initialize with new config
                 window.location.reload();
             }, 1500);
-        } catch (e) {
-            this.showError('Error saving configuration: ' + e.message);
+        } else {
+            // If database save failed, at least save to localStorage
+            try {
+                localStorage.setItem('coffeeClubConfig', JSON.stringify(finalConfig));
+                this.showSuccess();
+                setTimeout(() => {
+                    this.close();
+                    window.location.reload();
+                }, 1500);
+            } catch (e) {
+                this.showError('Error saving configuration: ' + e.message);
+            }
         }
     }
 
