@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Contact Maple Brew Coffee - Visit us, send us a message, or find our hours and location.">
-    <title>Contact Us - Maple Brew Coffee</title>
+    <meta name="description" content="Contact Side Porch Coffee Co. - Visit us, send us a message, or find our hours and location.">
+    <title>Contact Us - Side Porch Coffee Co.</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,7 +17,8 @@
                 <li><a href="coffee-club.html">Coffee Club</a></li>
                 <li><a href="about.html">About</a></li>
                 <li><a href="contact.html">Contact</a></li>
-                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Admin</a></li>
+                <li><a href="login.html">Login</a></li>
+                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
                 <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
             </ul>
         </nav>
@@ -29,6 +30,16 @@
             <p style="text-align: center; font-size: 1.1rem; color: var(--text-dark); margin-bottom: 3rem; max-width: 700px; margin-left: auto; margin-right: auto;">
                 We'd love to hear from you! Stop by for a cup of coffee, give us a call, or send us a message. We're here to serve you.
             </p>
+
+            <div class="map-container" style="margin-bottom: 3rem;">
+                <iframe 
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5339.926330024626!2d-96.26998722445869!3d30.56772666649551!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x864685006bb9f75f%3A0x457c306489e03968!2sSide%20Porch%20Coffee%20Co.!5e0!3m2!1sen!2sus!4v1764892388246!5m2!1sen!2sus" 
+                    allowfullscreen="" 
+                    loading="lazy" 
+                    referrerpolicy="no-referrer-when-downgrade"
+                    title="Side Porch Coffee Co. Location">
+                </iframe>
+            </div>
 
             <div class="contact-container">
                 <div class="contact-info">
@@ -86,20 +97,10 @@
                 </form>
             </div>
 
-            <div class="map-container">
-                <iframe 
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5339.926330024626!2d-96.26998722445869!3d30.56772666649551!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x864685006bb9f75f%3A0x457c306489e03968!2sSide%20Porch%20Coffee%20Co.!5e0!3m2!1sen!2sus!4v1764892388246!5m2!1sen!2sus" 
-                    allowfullscreen="" 
-                    loading="lazy" 
-                    referrerpolicy="no-referrer-when-downgrade"
-                    title="Side Porch Coffee Co. Location">
-                </iframe>
-            </div>
-
             <div class="content-card" style="margin-top: 3rem; text-align: center;">
                 <h3 style="color: var(--deep-brown); margin-bottom: 1rem;">Follow Us</h3>
                 <p style="margin-bottom: 1.5rem; color: var(--text-dark);">
-                    Stay connected with us on social media for daily specials, community events, and behind-the-scenes glimpses of life at Maple Brew Coffee.
+                    Stay connected with us on social media for daily specials, community events, and behind-the-scenes glimpses of life at Side Porch Coffee Co.
                 </p>
                 <div id="contact-social-links" class="social-links" style="justify-content: center; color: var(--deep-brown);"></div>
             </div>
@@ -142,29 +143,50 @@
     <script src="js/account-manager.js"></script>
     <script src="js/admin-manager.js"></script>
     <script src="js/dev-manager.js"></script>
+    <script src="js/nav-active.js"></script>
+    <script src="js/nav-login-logout.js"></script>
     <script>
         // Check module access and redirect if disabled
         // Load social links for contact page
         async function loadContactSocialLinks() {
-            if (typeof adminManager !== 'undefined' && configManager.isSupabaseConfigured()) {
-                const platforms = await adminManager.getSocialPlatforms();
-                const enabledPlatforms = platforms.filter(p => p.enabled && p.url && p.url.trim() !== '');
-                const container = document.getElementById('contact-social-links');
-                if (container && enabledPlatforms.length > 0) {
+            const container = document.getElementById('contact-social-links');
+            if (!container) return;
+            
+            try {
+                if (typeof adminManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                    const platforms = await adminManager.getSocialPlatforms();
+                    const enabledPlatforms = platforms.filter(p => p.enabled && p.url && p.url.trim() !== '');
+                    
+                    if (enabledPlatforms.length > 0) {
+                        container.innerHTML = '';
+                        container.style.display = 'flex'; // Make sure it's visible
+                        enabledPlatforms.forEach(platform => {
+                            const link = document.createElement('a');
+                            link.href = platform.url;
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer';
+                            link.setAttribute('aria-label', platform.platform);
+                            link.style.color = 'var(--deep-brown)';
+                            link.style.display = 'inline-flex';
+                            link.style.alignItems = 'center';
+                            link.style.justifyContent = 'center';
+                            
+                            // Get icon SVG
+                            const iconSvg = adminManager.getSocialIcon(platform.platform);
+                            link.innerHTML = iconSvg.replace('width="24" height="24"', 'width="64" height="64"');
+                            container.appendChild(link);
+                        });
+                    } else {
+                        // No platforms, but keep container visible (don't hide it)
+                        container.innerHTML = '';
+                    }
+                } else {
+                    // Supabase not configured or adminManager not available
                     container.innerHTML = '';
-                    enabledPlatforms.forEach(platform => {
-                        const link = document.createElement('a');
-                        link.href = platform.url;
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
-                        link.setAttribute('aria-label', platform.platform);
-                        link.style.color = 'var(--deep-brown)';
-                        link.innerHTML = adminManager.getSocialIcon(platform.platform).replace('width="24" height="24"', 'width="64" height="64"');
-                        container.appendChild(link);
-                    });
-                } else if (container && enabledPlatforms.length === 0) {
-                    container.style.display = 'none';
                 }
+            } catch (error) {
+                console.error('Error loading contact social links:', error);
+                container.innerHTML = '';
             }
         }
 
@@ -174,8 +196,34 @@
                 const hasAccess = await devManager.checkModuleAccess('contact');
                 if (!hasAccess) return; // Redirected
             }
+            // Load social links regardless of auth state
             await loadContactSocialLinks();
         });
+        
+        // Also try loading social links when config is loaded (in case supabaseReady already fired)
+        if (typeof window.addEventListener !== 'undefined') {
+            window.addEventListener('configLoaded', async () => {
+                await loadContactSocialLinks();
+            });
+        }
+        
+        // Also try loading after a delay to ensure everything is initialized
+        setTimeout(async () => {
+            await loadContactSocialLinks();
+        }, 1000);
+        
+        // Try loading when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', async () => {
+                setTimeout(async () => {
+                    await loadContactSocialLinks();
+                }, 500);
+            });
+        } else {
+            setTimeout(async () => {
+                await loadContactSocialLinks();
+            }, 500);
+        }
         
         window.addEventListener('supabaseReady', async () => {
             if (typeof adminManager !== 'undefined') {

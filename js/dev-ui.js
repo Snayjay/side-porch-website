@@ -74,6 +74,10 @@ class DevUI {
 
             console.log('Dev UI: User is developer, rendering panel...');
             await this.renderPanel();
+            
+            // Update navigation visibility after panel is rendered
+            await devManager.updateNavigationVisibility();
+            await devManager.updateFooterSocialLinks();
         } catch (error) {
             console.error('Dev UI initialization error:', error);
             const container = document.getElementById('dev-content');

@@ -18,7 +18,8 @@
                 <li><a href="coffee-club.html">Coffee Club</a></li>
                 <li><a href="about.html">About</a></li>
                 <li><a href="contact.html">Contact</a></li>
-                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Admin</a></li>
+                <li><a href="login.html">Login</a></li>
+                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
                 <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
             </ul>
         </nav>
@@ -31,11 +32,10 @@
                 Join our Coffee Club! Prepay for your favorite drinks and products, skip the line, and enjoy exclusive member benefits.
             </p>
 
-            <!-- Authentication Section -->
-            <div id="auth-section" class="content-card" style="margin-bottom: 2rem;">
-                <h2>Sign In / Sign Up</h2>
+            <!-- Authentication Section - Redirect to login page if not authenticated -->
+            <div id="auth-section" class="content-card" style="margin-bottom: 2rem; display: none;">
                 <div id="auth-container">
-                    <!-- Auth content will be rendered here -->
+                    <!-- Auth content will be rendered here if needed -->
                 </div>
             </div>
 
@@ -67,6 +67,14 @@
                     <div id="funding-container">
                         <!-- Funding content will be rendered here -->
                     </div>
+                </div>
+            </div>
+
+            <!-- Transaction History Section -->
+            <div id="transaction-history-section" class="content-card" style="display: none; margin-bottom: 2rem;">
+                <h2>Transaction History</h2>
+                <div id="transaction-history-container">
+                    <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading transactions...</p>
                 </div>
             </div>
 
@@ -122,6 +130,8 @@
     <script src="js/coffee-club-menu.js"></script>
     <script src="js/coffee-club-app.js"></script>
     <script src="js/dev-manager.js"></script>
+    <script src="js/nav-active.js"></script>
+    <script src="js/nav-login-logout.js"></script>
     <script>
         // Check module access and redirect if disabled
         window.addEventListener('supabaseReady', async () => {

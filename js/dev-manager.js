@@ -81,7 +81,6 @@ class DevManager {
                 .upsert({
                     config_key: configKey,
                     config_value: configValue,
-                    description: `Enable/disable ${moduleName} module`,
                     updated_at: new Date().toISOString()
                 }, {
                     onConflict: 'config_key'
@@ -176,7 +175,6 @@ class DevManager {
                 .upsert({
                     config_key: 'social_platforms',
                     config_value: JSON.stringify(cleanedPlatforms),
-                    description: 'Social media platform configurations',
                     updated_at: new Date().toISOString()
                 }, {
                     onConflict: 'config_key'
@@ -210,51 +208,55 @@ class DevManager {
     }
 
     // Update navigation visibility based on module states
+    // This applies to ALL users, including developers - module states control visibility
     async updateNavigationVisibility() {
         try {
             const states = await this.getAllModuleStates();
             
-            // Update Coffee Club link
+            // Update Coffee Club link - hide if disabled (for everyone, including developers)
             const coffeeClubLinks = document.querySelectorAll('a[href="coffee-club.html"]');
             coffeeClubLinks.forEach(link => {
                 const listItem = link.closest('li');
-                if (listItem) {
+                if (listItem && !listItem.classList.contains('admin-nav-link') && !listItem.classList.contains('dev-nav-link')) {
                     listItem.style.display = states.coffee_club ? '' : 'none';
                 }
             });
 
-            // Update Menu link
+            // Update Menu link - hide if disabled (for everyone, including developers)
             const menuLinks = document.querySelectorAll('a[href="menu.html"]');
             menuLinks.forEach(link => {
                 const listItem = link.closest('li');
-                if (listItem) {
+                if (listItem && !listItem.classList.contains('admin-nav-link') && !listItem.classList.contains('dev-nav-link')) {
                     listItem.style.display = states.menu ? '' : 'none';
                 }
             });
 
-            // Update About link
+            // Update About link - hide if disabled (for everyone, including developers)
             const aboutLinks = document.querySelectorAll('a[href="about.html"]');
             aboutLinks.forEach(link => {
                 const listItem = link.closest('li');
-                if (listItem) {
+                if (listItem && !listItem.classList.contains('admin-nav-link') && !listItem.classList.contains('dev-nav-link')) {
                     listItem.style.display = states.about ? '' : 'none';
                 }
             });
 
-            // Update Contact link
+            // Update Contact link - hide if disabled (for everyone, including developers)
             const contactLinks = document.querySelectorAll('a[href="contact.html"]');
             contactLinks.forEach(link => {
                 const listItem = link.closest('li');
-                if (listItem) {
+                if (listItem && !listItem.classList.contains('admin-nav-link') && !listItem.classList.contains('dev-nav-link')) {
                     listItem.style.display = states.contact ? '' : 'none';
                 }
             });
         } catch (error) {
-            // If database queries fail, default to showing all links
-            console.warn('Error updating navigation visibility, showing all links:', error);
-            document.querySelectorAll('.nav-links li').forEach(li => {
-                if (!li.classList.contains('admin-nav-link') && !li.classList.contains('dev-nav-link')) {
-                    li.style.display = '';
+            // If database queries fail, default to hiding all module links (safer default)
+            console.warn('Error updating navigation visibility:', error);
+            // Don't show all links on error - better to hide them
+            const moduleLinks = document.querySelectorAll('a[href="coffee-club.html"], a[href="menu.html"], a[href="about.html"], a[href="contact.html"]');
+            moduleLinks.forEach(link => {
+                const listItem = link.closest('li');
+                if (listItem && !listItem.classList.contains('admin-nav-link') && !listItem.classList.contains('dev-nav-link')) {
+                    listItem.style.display = 'none';
                 }
             });
         }

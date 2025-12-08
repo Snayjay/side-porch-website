@@ -86,6 +86,78 @@ class AdminManager {
         }
     }
 
+    async getUserTransactions(userId, limit = 50) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            const { data, error } = await client
+                .from('account_transactions')
+                .select('*')
+                .eq('account_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(limit);
+
+            if (error) throw error;
+            return { success: true, transactions: data || [] };
+        } catch (error) {
+            console.error('Get user transactions error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async adjustUserBalance(userId, amount, description, transactionType = 'deposit') {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        // Validate transaction type
+        if (!['deposit', 'purchase', 'refund'].includes(transactionType)) {
+            return { success: false, error: 'Invalid transaction type' };
+        }
+
+        try {
+            // Create transaction record
+            const { data: transaction, error: transError } = await client
+                .from('account_transactions')
+                .insert({
+                    account_id: userId,
+                    type: transactionType,
+                    amount: Math.abs(amount),
+                    description: description || (transactionType === 'deposit' ? 'Staff adjustment: Added funds' : 'Staff adjustment: Removed funds')
+                })
+                .select()
+                .single();
+
+            if (transError) throw transError;
+
+            // The trigger should automatically update the balance, but let's verify
+            const { data: account, error: accountError } = await client
+                .from('coffee_club_accounts')
+                .select('balance')
+                .eq('id', userId)
+                .single();
+
+            if (accountError) throw accountError;
+
+            return { success: true, transaction, newBalance: parseFloat(account.balance) };
+        } catch (error) {
+            console.error('Adjust user balance error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
     async updateUserRole(userId, role) {
         const client = getSupabaseClient();
         if (!client) {
@@ -547,6 +619,33 @@ class AdminManager {
         }
     }
 
+    async updateUnitTypeOrder(orderedUnitTypes) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            // Update each unit type's display_order
+            const updates = orderedUnitTypes.map(({ id, display_order }) =>
+                client
+                    .from('unit_types')
+                    .update({ display_order })
+                    .eq('id', id)
+            );
+
+            await Promise.all(updates);
+            return { success: true };
+        } catch (error) {
+            console.error('Update unit type order error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
     // Drink-ingredient relationship management
     async getDrinkIngredients(productId) {
         const client = getSupabaseClient();
@@ -622,6 +721,170 @@ class AdminManager {
         this.userRole = null;
     }
 
+    // Unit Type Management
+    async getAllUnitTypes() {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            const { data, error } = await client
+                .from('unit_types')
+                .select('*')
+                .order('display_order', { ascending: true })
+                .order('name', { ascending: true });
+
+            if (error) throw error;
+            return { success: true, unitTypes: data || [] };
+        } catch (error) {
+            console.error('Get all unit types error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async createUnitType(unitTypeData) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            // Get the max display_order to add new item at the end
+            const { data: maxOrderData } = await client
+                .from('unit_types')
+                .select('display_order')
+                .order('display_order', { ascending: false })
+                .limit(1)
+                .single();
+
+            const maxOrder = maxOrderData?.display_order || 0;
+
+            const { data, error } = await client
+                .from('unit_types')
+                .insert({
+                    name: unitTypeData.name.toLowerCase().trim(),
+                    display_name: unitTypeData.display_name || unitTypeData.name,
+                    abbreviation: unitTypeData.abbreviation || unitTypeData.name.toLowerCase().trim(),
+                    display_order: maxOrder + 1
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return { success: true, unitType: data };
+        } catch (error) {
+            console.error('Create unit type error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async updateUnitType(unitTypeId, unitTypeData) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            const updateData = {};
+            if (unitTypeData.name !== undefined) updateData.name = unitTypeData.name.toLowerCase().trim();
+            if (unitTypeData.display_name !== undefined) updateData.display_name = unitTypeData.display_name;
+            if (unitTypeData.abbreviation !== undefined) updateData.abbreviation = unitTypeData.abbreviation;
+            // Note: display_order is now managed via updateUnitTypeOrder method
+
+            const { data, error } = await client
+                .from('unit_types')
+                .update(updateData)
+                .eq('id', unitTypeId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return { success: true, unitType: data };
+        } catch (error) {
+            console.error('Update unit type error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async deleteUnitType(unitTypeId) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            // First, get the unit type name to check if it's in use
+            const { data: unitType, error: fetchError } = await client
+                .from('unit_types')
+                .select('name')
+                .eq('id', unitTypeId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            if (!unitType) {
+                return { success: false, error: 'Unit type not found' };
+            }
+
+            // Check if any ingredients are using this unit type
+            const { data: ingredients, error: checkError } = await client
+                .from('ingredients')
+                .select('id, name')
+                .eq('unit_type', unitType.name)
+                .limit(1);
+
+            if (checkError && checkError.code !== 'PGRST116') {
+                // PGRST116 means table doesn't exist, which is fine
+                throw checkError;
+            }
+
+            if (ingredients && ingredients.length > 0) {
+                return { 
+                    success: false, 
+                    error: `Cannot delete unit type. It is currently used by ${ingredients.length} ingredient(s). Please change the unit type for all associated ingredients first.`,
+                    inUse: true,
+                    ingredients: ingredients.map(i => i.name)
+                };
+            }
+
+            // Safe to delete
+            const { error } = await client
+                .from('unit_types')
+                .delete()
+                .eq('id', unitTypeId);
+
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('Delete unit type error:', error);
+            // Check if error is due to foreign key constraint
+            if (error.message && error.message.includes('foreign key')) {
+                return { 
+                    success: false, 
+                    error: 'Cannot delete unit type. It is currently in use by one or more ingredients. Please change the unit type for all associated ingredients first.',
+                    inUse: true
+                };
+            }
+            return { success: false, error: error.message };
+        }
+    }
+
     // Social Platform Management (for staff)
     async getSocialPlatforms() {
         const client = getSupabaseClient();
@@ -667,6 +930,12 @@ class AdminManager {
             return { success: false, error: 'Supabase not configured' };
         }
 
+        // Verify user is authenticated
+        const user = await authManager.getCurrentUser();
+        if (!user) {
+            return { success: false, error: 'Not authenticated. Please sign in.' };
+        }
+
         if (!(await this.isStaff())) {
             return { success: false, error: 'Unauthorized: Staff access required' };
         }
@@ -685,13 +954,15 @@ class AdminManager {
                 .upsert({
                     config_key: 'social_platforms',
                     config_value: JSON.stringify(cleanedPlatforms),
-                    description: 'Social media platform configurations',
                     updated_at: new Date().toISOString()
                 }, {
                     onConflict: 'config_key'
                 });
 
-            if (error) throw error;
+            if (error) {
+                console.error('Supabase error details:', error);
+                throw error;
+            }
 
             return { success: true };
         } catch (error) {

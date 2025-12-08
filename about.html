@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Learn about Maple Brew Coffee - Our story, our values, and our commitment to community.">
-    <title>About Us - Maple Brew Coffee</title>
+    <meta name="description" content="Learn about Side Porch Coffee Co. - Our story, our values, and our commitment to community.">
+    <title>About Us - Side Porch Coffee Co.</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,7 +17,8 @@
                 <li><a href="coffee-club.html">Coffee Club</a></li>
                 <li><a href="about.html">About</a></li>
                 <li><a href="contact.html">Contact</a></li>
-                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Admin</a></li>
+                <li><a href="login.html">Login</a></li>
+                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
                 <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
             </ul>
         </nav>
@@ -75,7 +76,7 @@
             <div class="content-card">
                 <h2 style="text-align: center; margin-bottom: 2rem; color: var(--deep-brown);">Join Our Community</h2>
                 <p style="text-align: center; font-size: 1.1rem; line-height: 1.9; color: var(--text-dark);">
-                    We invite you to become part of the Maple Brew family. Whether you're a daily regular or a first-time visitor, you'll find a warm welcome, a comfortable seat, and a cup of coffee made just for you. Come as you are, stay as long as you like, and leave feeling a little more connected to the world around you.
+                    We invite you to become part of the Side Porch Coffee Co. family. Whether you're a daily regular or a first-time visitor, you'll find a warm welcome, a comfortable seat, and a cup of coffee made just for you. Come as you are, stay as long as you like, and leave feeling a little more connected to the world around you.
                 </p>
                 <p style="text-align: center; margin-top: 1.5rem; font-size: 1rem; color: var(--auburn); font-style: italic;">
                     We can't wait to meet you.
@@ -100,6 +101,8 @@
     <script src="js/account-manager.js"></script>
     <script src="js/admin-manager.js"></script>
     <script src="js/dev-manager.js"></script>
+    <script src="js/nav-active.js"></script>
+    <script src="js/nav-login-logout.js"></script>
     <script>
         // Check module access and redirect if disabled
         window.addEventListener('supabaseReady', async () => {

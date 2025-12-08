@@ -74,15 +74,50 @@ class AuthManager {
         }
 
         try {
+            // Sign out from Supabase (this should clear Supabase's session storage)
             const { error } = await client.auth.signOut();
             if (error) throw error;
             
+            // Clear our custom storage
             this.currentUser = null;
             localStorage.removeItem('coffeeClubUser');
             localStorage.removeItem('coffeeClubLastActivity');
+            
+            // Clear all Supabase-related storage keys
+            // Supabase stores sessions in localStorage with keys like: sb-<project-ref>-auth-token
+            const supabaseKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth-token'))) {
+                    supabaseKeys.push(key);
+                }
+            }
+            supabaseKeys.forEach(key => {
+                localStorage.removeItem(key);
+            });
+            
+            // Also clear sessionStorage (Supabase might use it)
+            const sessionStorageKeys = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth-token'))) {
+                    sessionStorageKeys.push(key);
+                }
+            }
+            sessionStorageKeys.forEach(key => {
+                sessionStorage.removeItem(key);
+            });
+            
+            // Dispatch sign out event
+            window.dispatchEvent(new CustomEvent('authStateChanged', { detail: { user: null } }));
+            
             return { success: true };
         } catch (error) {
             console.error('Sign out error:', error);
+            // Even if Supabase signOut fails, clear local storage
+            this.currentUser = null;
+            localStorage.removeItem('coffeeClubUser');
+            localStorage.removeItem('coffeeClubLastActivity');
             return { success: false, error: error.message };
         }
     }
@@ -99,32 +134,43 @@ class AuthManager {
             
             if (sessionError) {
                 console.warn('Get session error:', sessionError);
+                // If there's an error getting session, clear any stale local storage
+                this.currentUser = null;
+                localStorage.removeItem('coffeeClubUser');
+                return null;
             }
             
-            // If we have a session, use the user from it
+            // If we have a valid session, use the user from it
             if (session?.user) {
+                // Verify the session is still valid by checking expiration
+                if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+                    // Session expired, sign out
+                    console.log('Session expired, signing out');
+                    await this.signOut();
+                    return null;
+                }
                 this.currentUser = session.user;
                 this.saveUserToStorage();
                 return session.user;
             }
             
-            // If no session, try getUser() as fallback
-            const { data: { user }, error } = await client.auth.getUser();
-            if (error) throw error;
-            
-            if (user) {
-                this.currentUser = user;
-                this.saveUserToStorage();
-            }
-            return user;
+            // If no session, clear local storage and return null
+            this.currentUser = null;
+            localStorage.removeItem('coffeeClubUser');
+            return null;
         } catch (error) {
             // AuthSessionMissingError is expected when no user is signed in - don't log it
             if (error?.message?.includes('Auth session missing') || error?.name === 'AuthSessionMissingError') {
-                // This is normal - no user is signed in
+                // This is normal - no user is signed in, clear any stale data
+                this.currentUser = null;
+                localStorage.removeItem('coffeeClubUser');
                 return null;
             }
             // Log other unexpected errors
             console.error('Get user error:', error);
+            // On error, clear stale data
+            this.currentUser = null;
+            localStorage.removeItem('coffeeClubUser');
             return null;
         }
     }
@@ -189,6 +235,32 @@ window.addEventListener('supabaseReady', async () => {
             } else if (event === 'SIGNED_OUT') {
                 authManager.currentUser = null;
                 localStorage.removeItem('coffeeClubUser');
+                localStorage.removeItem('coffeeClubLastActivity');
+                
+                // Clear all Supabase-related storage keys
+                const supabaseKeys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth-token'))) {
+                        supabaseKeys.push(key);
+                    }
+                }
+                supabaseKeys.forEach(key => {
+                    localStorage.removeItem(key);
+                });
+                
+                // Also clear sessionStorage
+                const sessionStorageKeys = [];
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+                    if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth-token'))) {
+                        sessionStorageKeys.push(key);
+                    }
+                }
+                sessionStorageKeys.forEach(key => {
+                    sessionStorage.removeItem(key);
+                });
+                
                 window.dispatchEvent(new CustomEvent('authStateChanged', { detail: { user: null } }));
             }
         });

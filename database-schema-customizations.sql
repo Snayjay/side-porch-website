@@ -1,17 +1,26 @@
 -- Database Schema Updates for Customizable Drinks
 -- Run this SQL in your Supabase SQL Editor after the base schema
+--
+-- PREREQUISITES:
+-- 1. Run database-schema.sql first (creates products table)
+-- 2. Run database-schema-unit-types.sql (creates unit_types table - REQUIRED)
+-- 3. Then run this file
 
 -- Ingredients table
+-- NOTE: This table uses the new category system (base_drinks, sugars, liquid_creamers, toppings, add_ins)
+-- and references unit_types table. Make sure unit_types table exists before running this.
 CREATE TABLE IF NOT EXISTS ingredients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
-    category TEXT NOT NULL CHECK (category IN ('espresso', 'syrup', 'liquid', 'sweetener', 'topping', 'milk', 'other')),
-    unit_type TEXT NOT NULL CHECK (unit_type IN ('shots', 'pumps', 'oz', 'tsp', 'packets', 'count')),
+    category TEXT NOT NULL CHECK (category IN ('base_drinks', 'sugars', 'liquid_creamers', 'toppings', 'add_ins')),
+    unit_type TEXT NOT NULL,
     unit_cost DECIMAL(10, 2) NOT NULL DEFAULT 0.00 CHECK (unit_cost >= 0),
     available BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(name, category)
+    UNIQUE(name, category),
+    -- Foreign key to unit_types table (will be added after unit_types table exists)
+    CONSTRAINT ingredients_unit_type_fkey FOREIGN KEY (unit_type) REFERENCES unit_types(name) ON DELETE RESTRICT
 );
 
 -- Drink ingredients (default ingredients for each drink)
@@ -50,15 +59,56 @@ ALTER TABLE ingredients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE drink_ingredients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_item_customizations ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (allows re-running migration)
+DROP POLICY IF EXISTS "Anyone can view available ingredients" ON ingredients;
+DROP POLICY IF EXISTS "Staff can insert ingredients" ON ingredients;
+DROP POLICY IF EXISTS "Staff can update ingredients" ON ingredients;
+DROP POLICY IF EXISTS "Staff can delete ingredients" ON ingredients;
+
 -- Anyone can view available ingredients
 CREATE POLICY "Anyone can view available ingredients"
     ON ingredients FOR SELECT
     USING (available = true);
 
+-- Staff can manage ingredients (insert, update, delete)
+CREATE POLICY "Staff can insert ingredients"
+    ON ingredients FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM coffee_club_accounts
+            WHERE id = auth.uid() AND role = 'staff'
+        )
+    );
+
+CREATE POLICY "Staff can update ingredients"
+    ON ingredients FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM coffee_club_accounts
+            WHERE id = auth.uid() AND role = 'staff'
+        )
+    );
+
+CREATE POLICY "Staff can delete ingredients"
+    ON ingredients FOR DELETE
+    USING (
+        EXISTS (
+            SELECT 1 FROM coffee_club_accounts
+            WHERE id = auth.uid() AND role = 'staff'
+        )
+    );
+
+-- Drop existing policies for drink_ingredients if they exist
+DROP POLICY IF EXISTS "Anyone can view drink ingredients" ON drink_ingredients;
+
 -- Anyone can view drink ingredients
 CREATE POLICY "Anyone can view drink ingredients"
     ON drink_ingredients FOR SELECT
     USING (true);
+
+-- Drop existing policies for order_item_customizations if they exist
+DROP POLICY IF EXISTS "Users can view customizations from their orders" ON order_item_customizations;
+DROP POLICY IF EXISTS "System can insert customizations for user orders" ON order_item_customizations;
 
 -- Users can view customizations from their orders
 CREATE POLICY "Users can view customizations from their orders"
@@ -84,41 +134,42 @@ CREATE POLICY "System can insert customizations for user orders"
         )
     );
 
--- Insert common ingredients
+-- Insert common ingredients (using new category system)
+-- NOTE: Make sure unit_types table exists and has default values before running this
 INSERT INTO ingredients (name, category, unit_type, unit_cost, available) VALUES
--- Espresso
-('Espresso Shot', 'espresso', 'shots', 0.75, true),
--- Syrups
-('Vanilla Syrup', 'syrup', 'pumps', 0.25, true),
-('Caramel Syrup', 'syrup', 'pumps', 0.25, true),
-('Hazelnut Syrup', 'syrup', 'pumps', 0.25, true),
-('Maple Syrup', 'syrup', 'pumps', 0.30, true),
-('Pumpkin Spice Syrup', 'syrup', 'pumps', 0.30, true),
-('Apple Syrup', 'syrup', 'pumps', 0.25, true),
-('Chocolate Syrup', 'syrup', 'pumps', 0.25, true),
--- Liquids
-('Steamed Milk', 'liquid', 'oz', 0.10, true),
-('Oat Milk', 'liquid', 'oz', 0.12, true),
-('Almond Milk', 'liquid', 'oz', 0.12, true),
-('Soy Milk', 'liquid', 'oz', 0.12, true),
-('Coconut Milk', 'liquid', 'oz', 0.12, true),
-('Heavy Cream', 'liquid', 'oz', 0.15, true),
-('Hot Water', 'liquid', 'oz', 0.00, true),
--- Sweeteners
-('Sugar', 'sweetener', 'tsp', 0.00, true),
-('Brown Sugar', 'sweetener', 'tsp', 0.00, true),
-('Honey', 'sweetener', 'tsp', 0.10, true),
-('Stevia', 'sweetener', 'packets', 0.00, true),
-('Splenda', 'sweetener', 'packets', 0.00, true),
-('Equal', 'sweetener', 'packets', 0.00, true),
+-- Base Drinks
+('Espresso Shot', 'base_drinks', 'shots', 0.75, true),
+-- Add-ins (syrups)
+('Vanilla Syrup', 'add_ins', 'pumps', 0.25, true),
+('Caramel Syrup', 'add_ins', 'pumps', 0.25, true),
+('Hazelnut Syrup', 'add_ins', 'pumps', 0.25, true),
+('Maple Syrup', 'add_ins', 'pumps', 0.30, true),
+('Pumpkin Spice Syrup', 'add_ins', 'pumps', 0.30, true),
+('Apple Syrup', 'add_ins', 'pumps', 0.25, true),
+('Chocolate Syrup', 'add_ins', 'pumps', 0.25, true),
+-- Liquid Creamers
+('Steamed Milk', 'liquid_creamers', 'oz', 0.10, true),
+('Oat Milk', 'liquid_creamers', 'oz', 0.12, true),
+('Almond Milk', 'liquid_creamers', 'oz', 0.12, true),
+('Soy Milk', 'liquid_creamers', 'oz', 0.12, true),
+('Coconut Milk', 'liquid_creamers', 'oz', 0.12, true),
+('Heavy Cream', 'liquid_creamers', 'oz', 0.15, true),
+('Hot Water', 'liquid_creamers', 'oz', 0.00, true),
+-- Sugars
+('Sugar', 'sugars', 'tsp', 0.00, true),
+('Brown Sugar', 'sugars', 'tsp', 0.00, true),
+('Honey', 'sugars', 'tsp', 0.10, true),
+('Stevia', 'sugars', 'packets', 0.00, true),
+('Splenda', 'sugars', 'packets', 0.00, true),
+('Equal', 'sugars', 'packets', 0.00, true),
 -- Toppings
-('Whipped Cream', 'topping', 'count', 0.50, true),
-('Chocolate Shavings', 'topping', 'count', 0.25, true),
-('Cinnamon', 'topping', 'count', 0.00, true),
-('Nutmeg', 'topping', 'count', 0.00, true),
-('Caramel Drizzle', 'topping', 'count', 0.25, true),
-('Maple Drizzle', 'topping', 'count', 0.30, true),
-('Toasted Pecans', 'topping', 'count', 0.50, true)
+('Whipped Cream', 'toppings', 'count', 0.50, true),
+('Chocolate Shavings', 'toppings', 'count', 0.25, true),
+('Cinnamon', 'toppings', 'count', 0.00, true),
+('Nutmeg', 'toppings', 'count', 0.00, true),
+('Caramel Drizzle', 'toppings', 'count', 0.25, true),
+('Maple Drizzle', 'toppings', 'count', 0.30, true),
+('Toasted Pecans', 'toppings', 'count', 0.50, true)
 ON CONFLICT (name, category) DO NOTHING;
 
 -- Example: Set up default ingredients for a few drinks

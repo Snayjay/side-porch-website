@@ -126,6 +126,15 @@ nav {
     width: 100%;
 }
 
+/* Active page indicator - same as hover effect */
+.nav-links a.active {
+    color: var(--accent-orange);
+}
+
+.nav-links a.active::after {
+    width: 100%;
+}
+
 /* Hero Section */
 .hero {
     position: relative;
@@ -485,6 +494,7 @@ footer .footer-link:hover {
     display: flex;
     justify-content: center;
     gap: 1.5rem;
+    flex-wrap: wrap;
 }
 
 .social-links a {
@@ -494,6 +504,11 @@ footer .footer-link:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Social links in content cards (like contact page) */
+.content-card .social-links a {
+    color: var(--deep-brown);
 }
 
 .social-links a svg {
@@ -508,6 +523,12 @@ footer .footer-link:hover {
 
 .social-links a:hover svg {
     fill: var(--accent-orange);
+}
+
+/* Larger icons for contact page */
+#contact-social-links a svg {
+    width: 64px;
+    height: 64px;
 }
 
 /* Animations */
@@ -806,5 +827,68 @@ footer .footer-link:hover {
 .btn:disabled:hover {
     transform: none;
     box-shadow: 0 4px 15px rgba(210, 105, 30, 0.4);
+}
+
+/* Drag and Drop Styles for Unit Types */
+#unit-types-table-body tr.dragging {
+    opacity: 0.5;
+}
+
+#unit-types-table-body tr.drag-over {
+    border-top: 2px solid var(--auburn);
+}
+
+#unit-types-table-body tr[draggable="true"]:hover {
+    background-color: rgba(160, 82, 45, 0.1);
+}
+
+/* Ingredient Accordion Styles */
+.ingredient-accordion {
+    border: 1px solid rgba(139, 111, 71, 0.2);
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: var(--parchment);
+}
+
+.ingredient-accordion-header {
+    width: 100%;
+    padding: 1rem 1.5rem;
+    background-color: var(--deep-brown);
+    color: var(--cream);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: background-color 0.3s ease;
+    text-align: left;
+}
+
+.ingredient-accordion-header:hover {
+    background-color: var(--warm-brown);
+}
+
+.ingredient-accordion-header span {
+    flex: 1;
+}
+
+.accordion-icon {
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+    margin-left: 1rem;
+}
+
+.ingredient-accordion-content {
+    padding: 0;
+    background-color: var(--cream);
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.ingredient-accordion-content .admin-table-container {
+    margin: 0;
+    border-radius: 0;
 }
 

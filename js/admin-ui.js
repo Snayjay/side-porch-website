@@ -103,7 +103,7 @@ class AdminUI {
             if (container) {
                 container.innerHTML = `
                     <div style="padding: 2rem; text-align: center;">
-                        <h3 style="color: var(--auburn); margin-bottom: 1rem;">❌ Error Loading Admin Dashboard</h3>
+                        <h3 style="color: var(--auburn); margin-bottom: 1rem;">❌ Error Loading Staff Dashboard</h3>
                         <p style="color: var(--text-dark); margin-bottom: 1rem;">${error.message || 'An unexpected error occurred'}</p>
                         <pre style="background: var(--cream); padding: 1rem; border-radius: 8px; text-align: left; overflow-x: auto; font-size: 0.85rem;">${error.stack || error.toString()}</pre>
                         <p style="color: var(--text-dark); opacity: 0.7; margin-top: 1rem; margin-bottom: 1rem; font-size: 0.9rem;">Check the browser console (F12) for more details.</p>
@@ -120,9 +120,9 @@ class AdminUI {
 
         container.innerHTML = `
             <div class="admin-dashboard">
-                <h2>Admin Dashboard</h2>
+                <h2>Staff Dashboard</h2>
                 <div class="admin-nav-tabs">
-                    <button class="admin-tab active" onclick="adminUI.showView('menu', event)">Menu Management</button>
+                    <button class="admin-tab active" onclick="adminUI.showView('menu', event)">Menu Category Management</button>
                     <button class="admin-tab" onclick="adminUI.showView('ingredients', event)">Ingredients</button>
                     <button class="admin-tab" onclick="adminUI.showView('social', event)">Social Platforms</button>
                     <button class="admin-tab" onclick="adminUI.showView('users', event)">Users</button>
@@ -192,7 +192,7 @@ class AdminUI {
         content.innerHTML = `
             <div class="admin-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h3>Menu Management</h3>
+                    <h3>Menu Category Management</h3>
                     <button class="btn" onclick="adminUI.showCategoryForm()">+ Add Category</button>
                 </div>
 
@@ -203,6 +203,11 @@ class AdminUI {
                             style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'drink' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'drink' ? '600' : '400'};">
                         Drinks
                     </button>
+                    <button class="category-type-tab ${this.selectedCategoryType === 'ingredient' ? 'active' : ''}" 
+                            onclick="adminUI.selectCategoryType('ingredient')" 
+                            style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'ingredient' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'ingredient' ? '600' : '400'};">
+                        Ingredients
+                    </button>
                     <button class="category-type-tab ${this.selectedCategoryType === 'food' ? 'active' : ''}" 
                             onclick="adminUI.selectCategoryType('food')" 
                             style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'food' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'food' ? '600' : '400'};">
@@ -212,11 +217,6 @@ class AdminUI {
                             onclick="adminUI.selectCategoryType('merch')" 
                             style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'merch' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'merch' ? '600' : '400'};">
                         Merch
-                    </button>
-                    <button class="category-type-tab ${this.selectedCategoryType === 'ingredient' ? 'active' : ''}" 
-                            onclick="adminUI.selectCategoryType('ingredient')" 
-                            style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'ingredient' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'ingredient' ? '600' : '400'};">
-                        Ingredient Categories
                     </button>
                 </div>
 
@@ -790,50 +790,276 @@ class AdminUI {
         const result = await adminManager.getAllIngredients(true);
         const ingredients = result.success ? result.ingredients : [];
 
+        // Load unit types
+        const unitTypesResult = await adminManager.getAllUnitTypes();
+        const unitTypes = unitTypesResult.success ? unitTypesResult.unitTypes : [];
+
         content.innerHTML = `
             <div class="admin-section">
+                <div class="ingredient-accordion" style="margin-bottom: 3rem;">
+                    <button class="ingredient-accordion-header" onclick="adminUI.toggleUnitTypesAccordion()" type="button">
+                        <span>Unit Types (${unitTypes.length})</span>
+                        <svg class="accordion-icon" id="accordion-icon-unit-types" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="ingredient-accordion-content" id="accordion-content-unit-types" style="display: none;">
+                        <div style="padding: 1.5rem;">
+                            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+                                <button class="btn" onclick="adminUI.showUnitTypeForm()">+ Add Unit Type</button>
+                            </div>
+                            <div class="admin-table-container">
+                                <table class="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 30px;"></th>
+                                            <th>Name</th>
+                                            <th>Display Name</th>
+                                            <th>Abbreviation</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="unit-types-table-body">
+                                        ${unitTypes.map((ut, index) => `
+                                            <tr data-unit-type-id="${ut.id}" style="cursor: move;">
+                                                <td style="text-align: center; color: var(--text-dark); opacity: 0.5;">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <line x1="9" y1="5" x2="9" y2="19"></line>
+                                                        <line x1="15" y1="5" x2="15" y2="19"></line>
+                                                    </svg>
+                                                </td>
+                                                <td>${ut.name}</td>
+                                                <td>${ut.display_name}</td>
+                                                <td>${ut.abbreviation}</td>
+                                                <td>
+                                                    <button class="btn btn-sm" onclick="adminUI.editUnitType('${ut.id}')">Edit</button>
+                                                    <button class="btn btn-sm btn-danger" onclick="adminUI.deleteUnitType('${ut.id}')">Delete</button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h3>Ingredients</h3>
                     <button class="btn" onclick="adminUI.showIngredientForm()">+ Add Ingredient</button>
                 </div>
-                <div class="admin-table-container">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Category</th>
-                                <th>Unit Type</th>
-                                <th>Unit Cost</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ingredients-table-body">
-                            ${ingredients.map(ing => `
-                                <tr>
-                                    <td>${ing.name}</td>
-                                    <td>${ing.category}</td>
-                                    <td>${ing.unit_type}</td>
-                                    <td>$${parseFloat(ing.unit_cost).toFixed(2)}</td>
-                                    <td>${ing.available ? '<span style="color: green;">Active</span>' : '<span style="color: orange;">Unavailable</span>'}</td>
-                                    <td>
-                                        <button class="btn btn-sm" onclick="adminUI.editIngredient('${ing.id}')">Edit</button>
-                                        <button class="btn btn-sm btn-danger" onclick="adminUI.deleteIngredient('${ing.id}')">Delete</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
+                
+                ${this.renderIngredientsAccordions(ingredients)}
             </div>
         `;
+
+        // Initialize drag and drop for unit types
+        this.initUnitTypeDragAndDrop();
     }
 
-    showIngredientForm(ingredientId = null) {
+    initUnitTypeDragAndDrop() {
+        const tbody = document.getElementById('unit-types-table-body');
+        if (!tbody) return;
+
+        let draggedElement = null;
+
+        // Make rows draggable
+        Array.from(tbody.querySelectorAll('tr')).forEach(row => {
+            row.draggable = true;
+            row.style.userSelect = 'none';
+            row.style.cursor = 'move';
+
+            row.addEventListener('dragstart', (e) => {
+                draggedElement = row;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', row.outerHTML);
+                row.style.opacity = '0.5';
+                row.classList.add('dragging');
+            });
+
+            row.addEventListener('dragend', (e) => {
+                row.style.opacity = '1';
+                row.classList.remove('dragging');
+                // Remove all drag-over classes
+                Array.from(tbody.querySelectorAll('tr')).forEach(r => {
+                    r.classList.remove('drag-over');
+                });
+            });
+
+            row.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                
+                const afterElement = this.getDragAfterElement(tbody, e.clientY);
+                
+                if (draggedElement && afterElement == null) {
+                    tbody.appendChild(draggedElement);
+                } else if (draggedElement && afterElement && draggedElement !== afterElement) {
+                    tbody.insertBefore(draggedElement, afterElement);
+                }
+            });
+
+            row.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                if (row !== draggedElement) {
+                    row.classList.add('drag-over');
+                }
+            });
+
+            row.addEventListener('dragleave', (e) => {
+                row.classList.remove('drag-over');
+            });
+
+            row.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                row.classList.remove('drag-over');
+                
+                if (draggedElement && draggedElement !== row) {
+                    // Get new order
+                    const rows = Array.from(tbody.querySelectorAll('tr'));
+                    const newOrder = rows.map((r, index) => ({
+                        id: r.dataset.unitTypeId,
+                        display_order: index + 1
+                    }));
+
+                    // Update order in database
+                    await this.updateUnitTypeOrder(newOrder);
+                }
+            });
+        });
+    }
+
+    renderIngredientsAccordions(ingredients) {
+        // Group ingredients by category
+        const categories = {
+            base_drinks: { name: 'Base Drinks', ingredients: [] },
+            sugars: { name: 'Sugars', ingredients: [] },
+            liquid_creamers: { name: 'Liquid Creamers', ingredients: [] },
+            toppings: { name: 'Toppings', ingredients: [] },
+            add_ins: { name: 'Add-ins', ingredients: [] }
+        };
+
+        ingredients.forEach(ing => {
+            const cat = categories[ing.category] || categories.add_ins;
+            cat.ingredients.push(ing);
+        });
+
+        // Generate accordion HTML
+        return Object.entries(categories).map(([key, category]) => {
+            const count = category.ingredients.length;
+            return `
+                <div class="ingredient-accordion" style="margin-bottom: 1rem;">
+                    <button class="ingredient-accordion-header" onclick="adminUI.toggleIngredientAccordion('${key}')" type="button">
+                        <span>${category.name} (${count})</span>
+                        <svg class="accordion-icon" id="accordion-icon-${key}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="ingredient-accordion-content" id="accordion-content-${key}" style="display: none;">
+                        <div class="admin-table-container">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Unit Type</th>
+                                        <th>Unit Cost</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${category.ingredients.map(ing => `
+                                        <tr>
+                                            <td>${ing.name}</td>
+                                            <td>${ing.unit_type}</td>
+                                            <td>$${parseFloat(ing.unit_cost).toFixed(2)}</td>
+                                            <td>${ing.available ? '<span style="color: green;">Active</span>' : '<span style="color: orange;">Unavailable</span>'}</td>
+                                            <td>
+                                                <button class="btn btn-sm" onclick="adminUI.editIngredient('${ing.id}')">Edit</button>
+                                                <button class="btn btn-sm btn-danger" onclick="adminUI.deleteIngredient('${ing.id}')">Delete</button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    toggleIngredientAccordion(categoryKey) {
+        const content = document.getElementById(`accordion-content-${categoryKey}`);
+        const icon = document.getElementById(`accordion-icon-${categoryKey}`);
+        
+        if (!content || !icon) return;
+
+        const isExpanded = content.style.display !== 'none';
+        content.style.display = isExpanded ? 'none' : 'block';
+        
+        // Rotate icon
+        icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        icon.style.transition = 'transform 0.2s ease';
+    }
+
+    toggleUnitTypesAccordion() {
+        const content = document.getElementById('accordion-content-unit-types');
+        const icon = document.getElementById('accordion-icon-unit-types');
+        
+        if (!content || !icon) return;
+
+        const isExpanded = content.style.display !== 'none';
+        content.style.display = isExpanded ? 'none' : 'block';
+        
+        // Rotate icon
+        icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        icon.style.transition = 'transform 0.2s ease';
+        
+        // Initialize drag and drop when expanded (in case it wasn't initialized yet)
+        if (!isExpanded) {
+            setTimeout(() => {
+                this.initUnitTypeDragAndDrop();
+            }, 100);
+        }
+    }
+
+    getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('tr:not(.dragging)')];
+        
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    async updateUnitTypeOrder(orderedUnitTypes) {
+        try {
+            const result = await adminManager.updateUnitTypeOrder(orderedUnitTypes);
+            if (result.success) {
+                // Refresh the view
+                await this.renderIngredientsView();
+            } else {
+                errorDialog.show(result.error || 'Error updating order', 'Error');
+            }
+        } catch (error) {
+            console.error('Error updating unit type order:', error);
+            errorDialog.show('Error updating order. Please try again.', 'Error');
+        }
+    }
+
+    async showIngredientForm(ingredientId = null) {
         this.editingIngredient = ingredientId;
+        const formHTML = await this.getIngredientFormHTML(ingredientId);
         const modal = this.createModal(
             ingredientId ? 'Edit Ingredient' : 'Add Ingredient',
-            this.getIngredientFormHTML(ingredientId)
+            formHTML
         );
         document.body.appendChild(modal);
 
@@ -842,7 +1068,15 @@ class AdminUI {
         }
     }
 
-    getIngredientFormHTML(ingredientId) {
+    async getIngredientFormHTML(ingredientId) {
+        // Load unit types from database
+        const unitTypesResult = await adminManager.getAllUnitTypes();
+        const unitTypes = unitTypesResult.success ? unitTypesResult.unitTypes : [];
+        
+        const unitTypeOptions = unitTypes.map(ut => 
+            `<option value="${ut.name}">${ut.display_name}</option>`
+        ).join('');
+
         return `
             <form id="ingredient-form" onsubmit="adminUI.saveIngredient(event)">
                 <div class="form-group">
@@ -862,12 +1096,7 @@ class AdminUI {
                 <div class="form-group">
                     <label for="ingredient-unit-type">Unit Type *</label>
                     <select id="ingredient-unit-type" required>
-                        <option value="shots">Shots</option>
-                        <option value="pumps">Pumps</option>
-                        <option value="oz">Ounces</option>
-                        <option value="tsp">Teaspoons</option>
-                        <option value="packets">Packets</option>
-                        <option value="count">Count</option>
+                        ${unitTypeOptions || '<option value="">No unit types available</option>'}
                     </select>
                 </div>
                 <div class="form-group">
@@ -899,7 +1128,28 @@ class AdminUI {
         if (data) {
             document.getElementById('ingredient-name').value = data.name || '';
             document.getElementById('ingredient-category').value = data.category || 'add_ins';
-            document.getElementById('ingredient-unit-type').value = data.unit_type || 'count';
+            
+            // Ensure unit type select is populated with current unit types
+            const unitTypesResult = await adminManager.getAllUnitTypes();
+            const unitTypes = unitTypesResult.success ? unitTypesResult.unitTypes : [];
+            const unitTypeSelect = document.getElementById('ingredient-unit-type');
+            
+            // Update options if unit types are loaded
+            if (unitTypes.length > 0) {
+                const currentValue = unitTypeSelect.value;
+                unitTypeSelect.innerHTML = unitTypes.map(ut => 
+                    `<option value="${ut.name}">${ut.display_name}</option>`
+                ).join('');
+                // Restore the value if it still exists, otherwise use the data value
+                if (unitTypes.some(ut => ut.name === currentValue)) {
+                    unitTypeSelect.value = currentValue;
+                } else {
+                    unitTypeSelect.value = data.unit_type || (unitTypes.length > 0 ? unitTypes[0].name : 'count');
+                }
+            } else {
+                unitTypeSelect.value = data.unit_type || 'count';
+            }
+            
             document.getElementById('ingredient-unit-cost').value = data.unit_cost || 0;
             document.getElementById('ingredient-available').checked = data.available !== false;
         }
@@ -981,12 +1231,21 @@ class AdminUI {
             return '<p style="color: var(--text-dark); opacity: 0.7; text-align: center; padding: 2rem;">No social platforms configured. Click "Add Platform" to add one.</p>';
         }
 
-        return platforms.map((platform, index) => `
+        return platforms.map((platform, index) => {
+            // Check if platform is new/unsaved (no platform name or marked as new)
+            const isNew = platform._isNew || !platform.platform || platform.platform.trim() === '';
+            
+            return `
             <div class="social-platform-item">
-                <input type="checkbox" 
-                       id="admin-social-enabled-${index}"
-                       ${platform.enabled ? 'checked' : ''}
-                       onchange="adminUI.updateSocialPlatform(${index}, 'enabled', this.checked)">
+                ${isNew ? '' : `
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" 
+                           id="admin-social-enabled-${index}"
+                           ${platform.enabled ? 'checked' : ''}
+                           onchange="adminUI.updateSocialPlatform(${index}, 'enabled', this.checked)">
+                    <span style="font-size: 0.9rem; color: var(--text-dark);">Active</span>
+                </label>
+                `}
                 <input type="text" 
                        class="platform-name"
                        id="admin-social-platform-${index}"
@@ -998,9 +1257,13 @@ class AdminUI {
                        value="${platform.url || ''}"
                        placeholder="https://..."
                        onblur="adminUI.updateSocialPlatform(${index}, 'url', this.value)">
-                <button class="btn-remove" onclick="adminUI.removeSocialPlatform(${index})">Remove</button>
+                ${isNew ? 
+                    `<button class="btn" onclick="adminUI.saveNewSocialPlatform(${index})">Add</button>` :
+                    `<button class="btn-remove" onclick="adminUI.removeSocialPlatform(${index})">Remove</button>`
+                }
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     async addSocialPlatform() {
@@ -1008,7 +1271,8 @@ class AdminUI {
         const newPlatform = {
             platform: '',
             url: '',
-            enabled: false
+            enabled: false,
+            _isNew: true  // Mark as new/unsaved
         };
         platforms.push(newPlatform);
         
@@ -1047,6 +1311,11 @@ class AdminUI {
         // If we're updating a platform name and it's now empty, don't save yet
         if (field === 'platform' && !value.trim()) {
             // User cleared the name or hasn't entered one yet - don't save
+            // Re-render to update button state
+            const container = document.getElementById('admin-social-platforms');
+            if (container) {
+                container.innerHTML = this.renderSocialPlatformsList(platforms);
+            }
             return;
         }
         
@@ -1077,6 +1346,66 @@ class AdminUI {
                 errorDialog.show(`Error: ${result.error}`, 'Error');
             }
         } catch (error) {
+            errorDialog.show(`Error saving: ${error.message}`, 'Error');
+        }
+    }
+
+    async saveNewSocialPlatform(index) {
+        // Get current values from the form inputs
+        const platformNameInput = document.getElementById(`admin-social-platform-${index}`);
+        const platformUrlInput = document.getElementById(`admin-social-url-${index}`);
+        
+        if (!platformNameInput) {
+            errorDialog.show('Could not find platform input', 'Error');
+            return;
+        }
+
+        const platformName = platformNameInput.value.trim();
+        const platformUrl = platformUrlInput?.value.trim() || '';
+        // New platforms default to enabled/active
+        const enabled = true;
+
+        if (!platformName) {
+            errorDialog.show('Please enter a platform name', 'Validation Error');
+            platformNameInput.focus();
+            return;
+        }
+
+        // Get existing platforms from database
+        const existingPlatforms = await adminManager.getSocialPlatforms();
+        
+        // Create new platform object
+        const newPlatform = {
+            platform: platformName,
+            url: platformUrl,
+            enabled: enabled
+        };
+        
+        // Add to existing platforms
+        const allPlatforms = [...existingPlatforms, newPlatform];
+
+        // Save to database
+        try {
+            const result = await adminManager.setSocialPlatforms(allPlatforms);
+            if (result.success) {
+                // Reload from database to get the saved state
+                const savedPlatforms = await adminManager.getSocialPlatforms();
+                
+                // Re-render to show only saved platforms (input fields will disappear)
+                const container = document.getElementById('admin-social-platforms');
+                if (container) {
+                    container.innerHTML = this.renderSocialPlatformsList(savedPlatforms);
+                }
+                
+                // Update footer links
+                await adminManager.updateFooterSocialLinks();
+                
+                errorDialog.showSuccess('Social platform added successfully!', 'Success');
+            } else {
+                errorDialog.show(`Error: ${result.error}`, 'Error');
+            }
+        } catch (error) {
+            console.error('Error saving social platform:', error);
             errorDialog.show(`Error saving: ${error.message}`, 'Error');
         }
     }
@@ -1143,7 +1472,8 @@ class AdminUI {
                                     <td>$${parseFloat(u.balance || 0).toFixed(2)}</td>
                                     <td>${new Date(u.created_at).toLocaleDateString()}</td>
                                     <td>
-                                        <button class="btn btn-sm" onclick="adminUI.updateUserRole('${u.id}', document.getElementById('role-${u.id}').value)">Update Role</button>
+                                        <button class="btn btn-sm" onclick="adminUI.updateUserRole('${u.id}', document.getElementById('role-${u.id}').value)" style="margin-right: 0.5rem;">Update Role</button>
+                                        <button class="btn btn-sm" onclick="adminUI.editUserFunds('${u.id}', '${u.email}', '${u.full_name || ''}', ${parseFloat(u.balance || 0)})" style="background-color: var(--auburn);">Edit Funds</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -1161,6 +1491,123 @@ class AdminUI {
             await this.renderUsersView();
         } else {
             errorDialog.show(result.error || 'Error updating user role', 'Error');
+        }
+    }
+
+    async editUserFunds(userId, userEmail, userName, currentBalance) {
+        // Fetch user transactions
+        const transactionsResult = await adminManager.getUserTransactions(userId);
+        const transactions = transactionsResult.success ? transactionsResult.transactions : [];
+
+        // Build transaction history HTML
+        let transactionsHTML = '';
+        if (transactions.length === 0) {
+            transactionsHTML = '<p style="text-align: center; color: var(--text-dark); opacity: 0.7;">No transactions yet.</p>';
+        } else {
+            transactionsHTML = '<div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 300px; overflow-y: auto;">';
+            transactions.forEach(transaction => {
+                const date = new Date(transaction.created_at).toLocaleString();
+                const amount = parseFloat(transaction.amount);
+                const isPositive = transaction.type === 'deposit' || transaction.type === 'refund';
+                const typeLabel = transaction.type === 'deposit' ? 'Deposit' : 
+                                 transaction.type === 'purchase' ? 'Purchase' : 
+                                 transaction.type === 'refund' ? 'Refund' : transaction.type;
+                
+                transactionsHTML += `
+                    <div style="background: white; border: 1px solid rgba(139, 111, 71, 0.2); border-radius: 8px; padding: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--deep-brown); font-size: 0.9rem;">
+                                ${typeLabel}
+                            </div>
+                            <div style="color: var(--text-dark); font-size: 0.85rem; opacity: 0.8; margin-top: 0.25rem;">
+                                ${transaction.description || 'No description'}
+                            </div>
+                            <div style="color: var(--text-dark); font-size: 0.75rem; opacity: 0.6; margin-top: 0.25rem;">
+                                ${date}
+                            </div>
+                        </div>
+                        <div style="font-size: 1rem; font-weight: 600; color: ${isPositive ? 'var(--auburn)' : 'var(--text-dark)'}; margin-left: 1rem;">
+                            ${isPositive ? '+' : '-'}$${amount.toFixed(2)}
+                        </div>
+                    </div>
+                `;
+            });
+            transactionsHTML += '</div>';
+        }
+
+        const modalContent = `
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div>
+                    <h3 style="color: var(--deep-brown); margin-bottom: 0.5rem;">User Information</h3>
+                    <p style="margin: 0.25rem 0;"><strong>Email:</strong> ${userEmail}</p>
+                    <p style="margin: 0.25rem 0;"><strong>Name:</strong> ${userName || 'N/A'}</p>
+                    <p style="margin: 0.25rem 0;"><strong>Current Balance:</strong> <span style="color: var(--auburn); font-size: 1.2rem; font-weight: 600;">$${currentBalance.toFixed(2)}</span></p>
+                </div>
+
+                <div>
+                    <h3 style="color: var(--deep-brown); margin-bottom: 0.75rem;">Transaction History</h3>
+                    ${transactionsHTML}
+                </div>
+
+                <div style="border-top: 2px solid rgba(139, 111, 71, 0.2); padding-top: 1.5rem;">
+                    <h3 style="color: var(--deep-brown); margin-bottom: 0.75rem;">Adjust Funds</h3>
+                    <form id="adjust-funds-form" onsubmit="adminUI.handleAdjustFunds(event, '${userId}')">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                            <div>
+                                <label for="adjust-amount" style="display: block; margin-bottom: 0.5rem; color: var(--text-dark); font-weight: 600;">Amount ($)</label>
+                                <input type="number" id="adjust-amount" step="0.01" min="0.01" required 
+                                       style="width: 100%; padding: 0.75rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-size: 1rem;">
+                            </div>
+                            <div>
+                                <label for="adjust-type" style="display: block; margin-bottom: 0.5rem; color: var(--text-dark); font-weight: 600;">Transaction Type</label>
+                                <select id="adjust-type" required 
+                                        style="width: 100%; padding: 0.75rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-size: 1rem;">
+                                    <option value="deposit">Add Funds (Deposit)</option>
+                                    <option value="refund">Refund (Add Funds)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label for="adjust-description" style="display: block; margin-bottom: 0.5rem; color: var(--text-dark); font-weight: 600;">Description</label>
+                            <input type="text" id="adjust-description" placeholder="e.g., Reward for loyalty, Prize winner, etc." 
+                                   style="width: 100%; padding: 0.75rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-size: 1rem;">
+                        </div>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                            <button type="button" class="btn btn-secondary" onclick="this.closest('.admin-modal-overlay').remove()">Cancel</button>
+                            <button type="submit" class="btn" style="background-color: var(--auburn);">Apply Adjustment</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        this.createModal('Edit User Funds', modalContent);
+    }
+
+    async handleAdjustFunds(event, userId) {
+        event.preventDefault();
+        
+        const amount = parseFloat(document.getElementById('adjust-amount').value);
+        const type = document.getElementById('adjust-type').value;
+        const description = document.getElementById('adjust-description').value || undefined;
+
+        if (!amount || amount <= 0) {
+            errorDialog.show('Please enter a valid amount', 'Invalid Amount');
+            return;
+        }
+
+        const result = await adminManager.adjustUserBalance(userId, amount, description, type);
+        
+        if (result.success) {
+            errorDialog.showSuccess(`Successfully ${type === 'deposit' || type === 'refund' ? 'added' : 'removed'} $${amount.toFixed(2)}. New balance: $${result.newBalance.toFixed(2)}`, 'Funds Adjusted');
+            
+            // Close modal and refresh users view
+            const modal = document.querySelector('.admin-modal-overlay');
+            if (modal) modal.remove();
+            
+            await this.renderUsersView();
+        } else {
+            errorDialog.show(result.error || 'Error adjusting funds', 'Error');
         }
     }
 
@@ -1215,6 +1662,203 @@ class AdminUI {
         });
 
         return overlay;
+    }
+
+    // Unit Type Management Methods
+    showUnitTypeForm(unitTypeId = null) {
+        this.editingUnitType = unitTypeId;
+        const modal = this.createModal(
+            unitTypeId ? 'Edit Unit Type' : 'Add Unit Type',
+            this.getUnitTypeFormHTML(unitTypeId)
+        );
+        document.body.appendChild(modal);
+
+        if (unitTypeId) {
+            this.loadUnitTypeData(unitTypeId);
+        }
+
+        // Add validation on blur for the name field
+        const nameInput = document.getElementById('unit-type-name');
+        if (nameInput) {
+            nameInput.addEventListener('blur', () => {
+                this.validateUnitTypeName();
+            });
+        }
+    }
+
+    validateUnitTypeName() {
+        const nameInput = document.getElementById('unit-type-name');
+        const errorDiv = document.getElementById('unit-type-form-error');
+        if (!nameInput || !errorDiv) return;
+
+        const name = nameInput.value.trim();
+        
+        // Reset styling
+        nameInput.style.borderColor = '';
+        nameInput.style.borderWidth = '';
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+
+        // Only validate if there's a value
+        if (!name) {
+            return;
+        }
+
+        // Validate format: lowercase letters and underscores only
+        const namePattern = /^[a-z_]+$/;
+        if (!namePattern.test(name)) {
+            const hasUppercase = /[A-Z]/.test(name);
+            const hasSpaces = /\s/.test(name);
+            const hasInvalidChars = /[^a-z_]/.test(name);
+            
+            let errorMessage = 'Name (internal) format is invalid: ';
+            const errors = [];
+            
+            if (hasUppercase) {
+                errors.push('must be lowercase only (no capital letters)');
+            }
+            if (hasSpaces) {
+                errors.push('cannot contain spaces');
+            }
+            if (hasInvalidChars && !hasUppercase && !hasSpaces) {
+                errors.push('can only contain lowercase letters and underscores');
+            }
+            
+            errorMessage += errors.join(', ') + '.';
+            
+            errorDiv.textContent = errorMessage;
+            errorDiv.style.display = 'block';
+            nameInput.style.borderColor = 'var(--auburn)';
+            nameInput.style.borderWidth = '2px';
+        }
+    }
+
+    getUnitTypeFormHTML(unitTypeId) {
+        return `
+            <form id="unit-type-form" onsubmit="adminUI.saveUnitType(event)">
+                <div class="form-group">
+                    <label for="unit-type-name">Name (internal) *</label>
+                    <input type="text" id="unit-type-name" required ${unitTypeId ? 'readonly' : ''} 
+                           placeholder="e.g., shots, pumps, oz" 
+                           pattern="[a-z_]+" 
+                           title="Lowercase letters and underscores only">
+                    <small>Internal identifier (lowercase, no spaces). Cannot be changed after creation.</small>
+                </div>
+                <div class="form-group">
+                    <label for="unit-type-display-name">Display Name *</label>
+                    <input type="text" id="unit-type-display-name" required placeholder="e.g., Shots, Pumps, Ounces">
+                    <small>Name shown to users</small>
+                </div>
+                <div class="form-group">
+                    <label for="unit-type-abbreviation">Abbreviation *</label>
+                    <input type="text" id="unit-type-abbreviation" required placeholder="e.g., shot, pump, oz">
+                    <small>Short form used in displays</small>
+                </div>
+                <div id="unit-type-form-error" style="color: var(--auburn); margin-bottom: 1rem; display: none;"></div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="this.closest('.admin-modal-overlay').remove()">Cancel</button>
+                    <button type="submit" class="btn">Save</button>
+                </div>
+            </form>
+        `;
+    }
+
+    async loadUnitTypeData(unitTypeId) {
+        const client = getSupabaseClient();
+        const { data } = await client
+            .from('unit_types')
+            .select('*')
+            .eq('id', unitTypeId)
+            .single();
+
+        if (data) {
+            document.getElementById('unit-type-name').value = data.name;
+            document.getElementById('unit-type-display-name').value = data.display_name;
+            document.getElementById('unit-type-abbreviation').value = data.abbreviation;
+        }
+    }
+
+    async saveUnitType(event) {
+        event.preventDefault();
+        const errorDiv = document.getElementById('unit-type-form-error');
+        const nameInput = document.getElementById('unit-type-name');
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+        
+        // Reset input styling
+        nameInput.style.borderColor = '';
+        nameInput.style.borderWidth = '';
+
+        const formData = {
+            name: nameInput.value.trim(),
+            display_name: document.getElementById('unit-type-display-name').value.trim(),
+            abbreviation: document.getElementById('unit-type-abbreviation').value.trim()
+        };
+
+        if (!formData.name || !formData.display_name || !formData.abbreviation) {
+            errorDiv.textContent = 'Please fill in all required fields';
+            errorDiv.style.display = 'block';
+            return;
+        }
+
+        // Validate Name (internal) field format
+        // Must be lowercase letters and underscores only, no spaces
+        const namePattern = /^[a-z_]+$/;
+        if (!namePattern.test(formData.name)) {
+            // Use the validation function to show consistent error
+            this.validateUnitTypeName();
+            nameInput.focus();
+            return;
+        }
+
+        try {
+            let result;
+            if (this.editingUnitType) {
+                result = await adminManager.updateUnitType(this.editingUnitType, formData);
+            } else {
+                result = await adminManager.createUnitType(formData);
+            }
+
+            if (result.success) {
+                errorDialog.showSuccess(
+                    this.editingUnitType ? 'Unit type updated successfully!' : 'Unit type created successfully!',
+                    'Success'
+                );
+                document.querySelector('.admin-modal-overlay').remove();
+                await this.renderIngredientsView();
+            } else {
+                errorDiv.textContent = result.error || 'Error saving unit type';
+                errorDiv.style.display = 'block';
+            }
+        } catch (error) {
+            errorDiv.textContent = error.message || 'Error saving unit type';
+            errorDiv.style.display = 'block';
+        }
+    }
+
+    async editUnitType(unitTypeId) {
+        this.showUnitTypeForm(unitTypeId);
+    }
+
+    async deleteUnitType(unitTypeId) {
+        if (!confirm('Are you sure you want to delete this unit type?')) {
+            return;
+        }
+
+        const result = await adminManager.deleteUnitType(unitTypeId);
+        if (result.success) {
+            errorDialog.showSuccess('Unit type deleted successfully!', 'Success');
+            await this.renderIngredientsView();
+        } else {
+            if (result.inUse) {
+                const message = result.ingredients && result.ingredients.length > 0
+                    ? `${result.error}\n\nIngredients using this unit type:\n${result.ingredients.slice(0, 5).join(', ')}${result.ingredients.length > 5 ? '...' : ''}`
+                    : result.error;
+                errorDialog.show(message, 'Cannot Delete Unit Type');
+            } else {
+                errorDialog.show(result.error || 'Error deleting unit type', 'Error');
+            }
+        }
     }
 }
 

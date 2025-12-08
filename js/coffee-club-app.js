@@ -81,6 +81,18 @@ class CoffeeClubApp {
 
     setupAuthUI() {
         const authContainer = document.getElementById('auth-container');
+        const authSection = document.getElementById('auth-section');
+        
+        // If on coffee-club.html and not authenticated, redirect to login page
+        if (window.location.pathname.includes('coffee-club.html') || window.location.pathname.endsWith('coffee-club.html')) {
+            if (!authManager.isAuthenticated()) {
+                // Redirect to login page with return URL
+                const returnUrl = encodeURIComponent(window.location.href);
+                window.location.href = `login.html?return=${returnUrl}`;
+                return;
+            }
+        }
+        
         if (!authContainer) return;
 
         if (authManager.isAuthenticated()) {
@@ -345,17 +357,18 @@ class CoffeeClubApp {
 
         if (!email || !password) {
             errorDialog.show('Please enter email and password', 'Missing Information');
-            return;
+            return { success: false, error: 'Missing email or password' };
         }
 
         if (!this.validateEmail(email)) {
             errorDialog.show('Please enter a valid email address with a proper domain (e.g., name@example.com)', 'Invalid Email Format');
-            return;
+            return { success: false, error: 'Invalid email format' };
         }
 
         const result = await authManager.signInWithEmail(email, password);
         if (result.success) {
             this.handleAuthStateChange(result.user);
+            return { success: true, user: result.user };
         } else {
             // Show more helpful error message for email verification
             if (result.needsEmailVerification) {
@@ -363,6 +376,7 @@ class CoffeeClubApp {
             } else {
                 errorDialog.show(result.error || 'Sign in failed. Please check your credentials and try again.', 'Sign In Failed');
             }
+            return { success: false, error: result.error };
         }
     }
 
@@ -422,6 +436,7 @@ class CoffeeClubApp {
         document.getElementById('welcome-section').style.display = 'none';
         document.getElementById('account-section').style.display = 'none';
         document.getElementById('funding-section').style.display = 'none';
+        document.getElementById('transaction-history-section').style.display = 'none';
         document.getElementById('order-history-section').style.display = 'none';
         if (menuCartSection) menuCartSection.style.display = 'none'; // Hide menu and cart
         
@@ -636,8 +651,9 @@ class CoffeeClubApp {
                 document.getElementById('auth-section').style.display = 'block';
                 document.getElementById('welcome-section').style.display = 'none';
                 document.getElementById('account-section').style.display = 'none';
-                document.getElementById('funding-section').style.display = 'none';
-                document.getElementById('order-history-section').style.display = 'none';
+            document.getElementById('funding-section').style.display = 'none';
+            document.getElementById('transaction-history-section').style.display = 'none';
+            document.getElementById('order-history-section').style.display = 'none';
                 if (menuCartSection) menuCartSection.style.display = 'none';
                 
                 this.showEmailVerificationMessage(user.email);
@@ -654,6 +670,10 @@ class CoffeeClubApp {
                 // Ensure accordion starts collapsed
                 fundingSection.classList.remove('expanded');
             }
+            const transactionHistorySection = document.getElementById('transaction-history-section');
+            if (transactionHistorySection) {
+                transactionHistorySection.style.display = 'block';
+            }
             document.getElementById('order-history-section').style.display = 'block';
             if (menuCartSection) menuCartSection.style.display = 'grid'; // Show menu and cart
 
@@ -664,6 +684,7 @@ class CoffeeClubApp {
 
             await this.updateAccountDisplay();
             await this.updateOrderHistory();
+            await this.updateTransactionHistory();
             await this.updateAdminLinkVisibility();
         } else {
             // User is not authenticated
@@ -674,6 +695,7 @@ class CoffeeClubApp {
             document.getElementById('welcome-section').style.display = 'none';
             document.getElementById('account-section').style.display = 'none';
             document.getElementById('funding-section').style.display = 'none';
+            document.getElementById('transaction-history-section').style.display = 'none';
             document.getElementById('order-history-section').style.display = 'none';
             if (menuCartSection) menuCartSection.style.display = 'none'; // Hide menu and cart
 
@@ -1002,6 +1024,63 @@ class CoffeeClubApp {
         html += '</div>';
 
         orderHistoryContainer.innerHTML = html;
+    }
+
+    async updateTransactionHistory() {
+        const transactionHistoryContainer = document.getElementById('transaction-history-container');
+        if (!transactionHistoryContainer) return;
+
+        try {
+            const transactions = await accountManager.getTransactions(50);
+            
+            if (!transactions || transactions.length === 0) {
+                transactionHistoryContainer.innerHTML = `
+                    <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">
+                        No transactions yet. Add funds to your account to see transaction history.
+                    </p>
+                `;
+                return;
+            }
+
+            let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+            transactions.forEach(transaction => {
+                const date = new Date(transaction.created_at).toLocaleString();
+                const amount = parseFloat(transaction.amount);
+                const isPositive = transaction.type === 'deposit' || transaction.type === 'refund';
+                const typeLabel = transaction.type === 'deposit' ? 'Deposit' : 
+                                 transaction.type === 'purchase' ? 'Purchase' : 
+                                 transaction.type === 'refund' ? 'Refund' : transaction.type;
+                
+                html += `
+                    <div style="background: white; border: 1px solid rgba(139, 111, 71, 0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">
+                                ${typeLabel}
+                            </div>
+                            <div style="color: var(--text-dark); font-size: 0.9rem; opacity: 0.8;">
+                                ${transaction.description || 'No description'}
+                            </div>
+                            <div style="color: var(--text-dark); font-size: 0.85rem; opacity: 0.6; margin-top: 0.25rem;">
+                                ${date}
+                            </div>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 600; color: ${isPositive ? 'var(--auburn)' : 'var(--text-dark)'};">
+                            ${isPositive ? '+' : '-'}$${amount.toFixed(2)}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            transactionHistoryContainer.innerHTML = html;
+        } catch (error) {
+            console.error('Error loading transaction history:', error);
+            transactionHistoryContainer.innerHTML = `
+                <p style="text-align: center; color: var(--auburn);">
+                    Error loading transaction history. Please try again later.
+                </p>
+            `;
+        }
     }
 }
 

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Admin Dashboard - Coffee Club Management">
-    <title>Admin - Side Porch Coffee Co.</title>
+    <meta name="description" content="Staff Dashboard - Coffee Club Management">
+    <title>Staff - Side Porch Coffee Co.</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="coffee-club.css">
 </head>
@@ -18,7 +18,8 @@
                 <li><a href="coffee-club.html">Coffee Club</a></li>
                 <li><a href="about.html">About</a></li>
                 <li><a href="contact.html">Contact</a></li>
-                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Admin</a></li>
+                <li><a href="login.html">Login</a></li>
+                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
                 <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
             </ul>
         </nav>
@@ -26,7 +27,7 @@
 
     <main>
         <section class="section">
-            <h1 class="section-title">Admin Dashboard</h1>
+            <h1 class="section-title">Staff Dashboard</h1>
             <div id="admin-content" class="content-card">
                 <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading...</p>
             </div>
@@ -56,6 +57,8 @@
     <script src="js/admin-manager.js"></script>
     <script src="js/admin-ui.js"></script>
     <script src="js/dev-manager.js"></script>
+    <script src="js/nav-active.js"></script>
+    <script src="js/nav-login-logout.js"></script>
     <script>
         // CRITICAL: Log after all scripts loaded
         console.log('=== ADMIN.HTML ALL SCRIPTS LOADED ===');

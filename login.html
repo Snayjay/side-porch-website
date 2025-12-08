@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sign In - Side Porch Coffee Co.">
+    <title>Sign In - Side Porch Coffee Co.</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="coffee-club.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="index.html" class="logo"><img src="./assets/badge.png" alt="Side Porch Coffee Co."></a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="menu.html">Menu</a></li>
+                <li><a href="coffee-club.html">Coffee Club</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="contact.html">Contact</a></li>
+                <li><a href="login.html">Login</a></li>
+                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
+                <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="section">
+            <h1 class="section-title">Sign In</h1>
+            <p style="text-align: center; font-size: 1.1rem; color: var(--text-dark); margin-bottom: 3rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+                Sign in to access your Coffee Club account, or sign up to create a new account.
+            </p>
+
+            <!-- Authentication Section -->
+            <div id="auth-section" class="content-card" style="max-width: 500px; margin: 0 auto;">
+                <h2>Sign In / Sign Up</h2>
+                <div id="auth-container">
+                    <!-- Auth content will be rendered here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 <a href="http://www.jeffreyloehr.com/2KMJ-Studios" class="footer-link">2KMJ-Studios</a>. All rights reserved.</p>
+        <p>Brewed with ❤️ in our small town</p>
+        <div class="social-links"></div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="config.local.js" onerror="console.log('config.local.js not found')"></script>
+    <script src="js/config.js"></script>
+    <script src="js/error-dialog.js"></script>
+    <script src="js/secrets-dialog.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/account-manager.js"></script>
+    <script src="js/admin-manager.js"></script>
+    <script src="js/dev-manager.js"></script>
+    <script src="js/coffee-club-app.js"></script>
+    <script src="js/nav-active.js"></script>
+    <script src="js/nav-login-logout.js"></script>
+    <script>
+        // Override signIn and signUp to redirect after successful login
+        const originalSignIn = coffeeClubApp.signIn;
+        const originalSignUp = coffeeClubApp.signUp;
+
+        coffeeClubApp.signIn = async function() {
+            const result = await originalSignIn.call(this);
+            if (result && result.success) {
+                // Wait a moment for auth state to update
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Check for return URL or redirect appropriately
+                const urlParams = new URLSearchParams(window.location.search);
+                const returnUrl = urlParams.get('return');
+                
+                if (returnUrl) {
+                    window.location.href = decodeURIComponent(returnUrl);
+                    return result;
+                }
+                
+                // Check user roles and redirect appropriately
+                if (typeof devManager !== 'undefined' && typeof adminManager !== 'undefined') {
+                    const user = await authManager.getCurrentUser();
+                    if (user) {
+                        const isDev = await devManager.isDeveloper();
+                        const isStaff = await adminManager.isStaff();
+                        
+                        // Redirect to Dev page if developer
+                        if (isDev) {
+                            window.location.href = 'dev.html';
+                            return result;
+                        }
+                        
+                        // Redirect to Staff page if staff
+                        if (isStaff) {
+                            window.location.href = 'admin.html';
+                            return result;
+                        }
+                    }
+                }
+                
+                // Otherwise redirect based on Coffee Club module state
+                if (typeof devManager !== 'undefined') {
+                    const coffeeClubEnabled = await devManager.getModuleState('coffee_club');
+                    if (coffeeClubEnabled) {
+                        window.location.href = 'coffee-club.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    window.location.href = 'coffee-club.html';
+                }
+            }
+            return result;
+        };
+
+        coffeeClubApp.signUp = async function() {
+            const result = await originalSignUp.call(this);
+            if (result && result.success) {
+                // After signup, user needs to verify email, so stay on login page
+                // They'll be redirected after email verification
+            }
+            return result;
+        };
+
+        // Check if already authenticated and redirect
+        window.addEventListener('supabaseReady', async () => {
+            const user = await authManager.getCurrentUser();
+            if (user) {
+                // Already logged in, redirect appropriately based on roles
+                if (typeof devManager !== 'undefined' && typeof adminManager !== 'undefined') {
+                    const isDev = await devManager.isDeveloper();
+                    const isStaff = await adminManager.isStaff();
+                    
+                    // Redirect to Dev page if developer
+                    if (isDev) {
+                        window.location.href = 'dev.html';
+                        return;
+                    }
+                    
+                    // Redirect to Staff page if staff
+                    if (isStaff) {
+                        window.location.href = 'admin.html';
+                        return;
+                    }
+                }
+                
+                // Otherwise redirect based on Coffee Club module state
+                if (typeof devManager !== 'undefined') {
+                    const coffeeClubEnabled = await devManager.getModuleState('coffee_club');
+                    if (coffeeClubEnabled) {
+                        window.location.href = 'coffee-club.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    window.location.href = 'coffee-club.html';
+                }
+            }
+        });
+        
+        // Also listen for auth state changes (in case login happens after page load)
+        window.addEventListener('authStateChanged', async (event) => {
+            const user = event.detail?.user;
+            if (user) {
+                // Wait a moment for roles to be checked
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Redirect based on roles
+                if (typeof devManager !== 'undefined' && typeof adminManager !== 'undefined') {
+                    const isDev = await devManager.isDeveloper();
+                    const isStaff = await adminManager.isStaff();
+                    
+                    if (isDev) {
+                        window.location.href = 'dev.html';
+                        return;
+                    }
+                    
+                    if (isStaff) {
+                        window.location.href = 'admin.html';
+                        return;
+                    }
+                }
+                
+                // Otherwise redirect based on Coffee Club module state
+                if (typeof devManager !== 'undefined') {
+                    const coffeeClubEnabled = await devManager.getModuleState('coffee_club');
+                    if (coffeeClubEnabled) {
+                        window.location.href = 'coffee-club.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    window.location.href = 'coffee-club.html';
+                }
+            }
+        });
+
+        // Update navigation visibility
+        window.addEventListener('supabaseReady', async () => {
+            if (typeof devManager !== 'undefined') {
+                await devManager.updateNavigationVisibility();
+                await devManager.updateFooterSocialLinks();
+            }
+        });
+
+        // Update admin and dev link visibility
+        window.addEventListener('supabaseReady', async () => {
+            if (typeof devManager !== 'undefined') {
+                const user = await authManager.getCurrentUser();
+                if (user) {
+                    const isDev = await devManager.isDeveloper();
+                    document.querySelectorAll('.dev-nav-link').forEach(link => {
+                        link.style.display = isDev ? 'list-item' : 'none';
+                    });
+                }
+            }
+            if (typeof adminManager !== 'undefined') {
+                await authManager.getCurrentUser();
+                const isStaff = await adminManager.isStaff();
+                document.querySelectorAll('.admin-nav-link').forEach(link => {
+                    link.style.display = isStaff ? '' : 'none';
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+

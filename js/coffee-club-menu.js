@@ -11,108 +11,104 @@ class CoffeeClubMenu {
     async loadProducts() {
         const client = getSupabaseClient();
         if (!client) {
-            // Use mock data if Supabase not configured
-            this.products = this.getMockProducts();
+            console.error('Supabase not configured');
+            this.products = [];
             this.renderMenu();
             return;
         }
 
         try {
+            // Load products with their categories
             const { data, error } = await client
                 .from('products')
-                .select('*')
+                .select(`
+                    *,
+                    menu_categories (
+                        id,
+                        name,
+                        type
+                    )
+                `)
                 .eq('available', true)
-                .order('category', { ascending: true })
                 .order('name', { ascending: true });
 
             if (error) throw error;
             
-            this.products = data || this.getMockProducts();
+            this.products = data || [];
         } catch (error) {
             console.error('Load products error:', error);
-            this.products = this.getMockProducts();
+            this.products = [];
         }
 
         this.renderMenu();
     }
 
-    getMockProducts() {
-        return [
-            // Drinks (8.25% tax)
-            { id: '1', name: 'Maple Pecan Latte', description: 'Rich espresso with steamed milk, real maple syrup, and toasted pecans', category: 'drink', price: 5.95, tax_rate: 0.0825 },
-            { id: '2', name: 'Pumpkin Spice Latte', description: 'Espresso, steamed milk, pumpkin puree, and warm spices', category: 'drink', price: 5.75, tax_rate: 0.0825 },
-            { id: '3', name: 'Spiced Apple Cider', description: 'Warm, mulled apple cider with cinnamon and cloves', category: 'drink', price: 4.50, tax_rate: 0.0825 },
-            { id: '4', name: 'Caramel Apple Macchiato', description: 'Espresso with steamed milk, apple syrup, and caramel', category: 'drink', price: 5.85, tax_rate: 0.0825 },
-            { id: '5', name: 'Chai Latte', description: 'Traditional spiced chai tea with steamed milk', category: 'drink', price: 4.95, tax_rate: 0.0825 },
-            { id: '6', name: 'Hazelnut Mocha', description: 'Chocolate and espresso with hazelnut syrup', category: 'drink', price: 5.65, tax_rate: 0.0825 },
-            { id: '7', name: 'Maple Brew House Blend', description: 'Medium roast with notes of maple and caramel', category: 'drink', price: 4.25, tax_rate: 0.0825 },
-            { id: '8', name: 'Americano', description: 'Rich espresso shots topped with hot water', category: 'drink', price: 3.75, tax_rate: 0.0825 },
-            { id: '9', name: 'Cappuccino', description: 'Equal parts espresso, steamed milk, and foam', category: 'drink', price: 4.50, tax_rate: 0.0825 },
-            { id: '10', name: 'Cold Brew', description: 'Smooth, slow-steeped coffee served over ice', category: 'drink', price: 4.50, tax_rate: 0.0825 },
-            // Food (8.25% tax)
-            { id: '11', name: 'Cinnamon Roll', description: 'Freshly baked cinnamon rolls with cream cheese frosting', category: 'food', price: 4.50, tax_rate: 0.0825 },
-            { id: '12', name: 'Pumpkin Muffin', description: 'Moist pumpkin muffin with warm spices', category: 'food', price: 3.95, tax_rate: 0.0825 },
-            { id: '13', name: 'Apple Pie Slice', description: 'Homemade apple pie with flaky crust', category: 'food', price: 5.50, tax_rate: 0.0825 },
-            { id: '14', name: 'Maple Scone', description: 'Buttery scone drizzled with real maple glaze', category: 'food', price: 3.75, tax_rate: 0.0825 },
-            { id: '15', name: 'Chocolate Chip Cookie', description: 'Classic cookie made with real butter', category: 'food', price: 2.95, tax_rate: 0.0825 },
-            { id: '16', name: 'Croissant', description: 'Buttery, flaky French croissant', category: 'food', price: 3.50, tax_rate: 0.0825 },
-            // Ingredients (0% tax)
-            { id: '17', name: 'Coffee Beans - House Blend', description: '1 lb bag of our signature house blend', category: 'ingredient', price: 14.99, tax_rate: 0.0000 },
-            { id: '18', name: 'Coffee Beans - Dark Roast', description: '1 lb bag of dark roast beans', category: 'ingredient', price: 15.99, tax_rate: 0.0000 },
-            { id: '19', name: 'Maple Syrup', description: '12 oz bottle of pure maple syrup', category: 'ingredient', price: 12.99, tax_rate: 0.0000 },
-            { id: '20', name: 'Chai Tea Blend', description: '4 oz bag of our signature chai blend', category: 'ingredient', price: 8.99, tax_rate: 0.0000 },
-            { id: '21', name: 'Pumpkin Spice Mix', description: '2 oz jar of pumpkin spice seasoning', category: 'ingredient', price: 6.99, tax_rate: 0.0000 },
-            // Merch (8.25% tax)
-            { id: '22', name: 'Coffee Club T-Shirt', description: 'Comfortable cotton t-shirt with Coffee Club logo', category: 'merch', price: 24.99, tax_rate: 0.0825 },
-            { id: '23', name: 'Coffee Club Mug', description: 'Ceramic mug with Side Porch Coffee Co. logo', category: 'merch', price: 16.99, tax_rate: 0.0825 },
-            { id: '24', name: 'Coffee Club Tote Bag', description: 'Reusable canvas tote bag', category: 'merch', price: 18.99, tax_rate: 0.0825 },
-            { id: '25', name: 'Coffee Club Hoodie', description: 'Cozy hoodie with Coffee Club branding', category: 'merch', price: 45.99, tax_rate: 0.0825 },
-            { id: '26', name: 'Coffee Club Hat', description: 'Adjustable cap with embroidered logo', category: 'merch', price: 22.99, tax_rate: 0.0825 }
-        ];
-    }
 
     renderMenu() {
         const container = document.getElementById('coffee-club-menu-container');
         if (!container) return;
 
-        // Group products by category first, then by menu_section for drinks
-        const categories = {
-            drink: { name: '☕ Drinks', products: [], sections: {} },
-            food: { name: '🥐 Food', products: [] },
-            ingredient: { name: '🛒 Ingredients', products: [] },
-            merch: { name: '👕 Merchandise', products: [] }
-        };
+        if (this.products.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-dark); opacity: 0.7; padding: 2rem;">No menu items available at this time. Please check back soon!</p>';
+            return;
+        }
 
+        // Group products by category from menu_categories table
+        const categoriesMap = {};
+        
         this.products.forEach(product => {
-            if (categories[product.category]) {
-                if (product.category === 'drink' && product.menu_section) {
-                    // Group drinks by menu_section
+            if (product.menu_categories && product.category_id) {
+                const category = product.menu_categories;
+                const categoryId = product.category_id;
+                
+                if (!categoriesMap[categoryId]) {
+                    // Get emoji for category type
+                    const emoji = this.getCategoryEmoji(category.type);
+                    categoriesMap[categoryId] = {
+                        id: categoryId,
+                        name: category.name,
+                        type: category.type,
+                        emoji: emoji,
+                        products: [],
+                        sections: {}
+                    };
+                }
+                
+                // For drinks, group by menu_section if available
+                if (category.type === 'drink' && product.menu_section) {
                     const section = product.menu_section;
-                    if (!categories.drink.sections[section]) {
-                        categories.drink.sections[section] = [];
+                    if (!categoriesMap[categoryId].sections[section]) {
+                        categoriesMap[categoryId].sections[section] = [];
                     }
-                    categories.drink.sections[section].push(product);
+                    categoriesMap[categoryId].sections[section].push(product);
                 } else {
-                    // Non-drinks or drinks without menu_section go to main category
-                    categories[product.category].products.push(product);
+                    categoriesMap[categoryId].products.push(product);
                 }
             }
         });
 
+        // Sort categories by type (drink, food, merch) then by display_order
+        const sortedCategories = Object.values(categoriesMap).sort((a, b) => {
+            const typeOrder = { 'drink': 1, 'food': 2, 'merch': 3, 'ingredient': 4 };
+            const typeDiff = (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+            if (typeDiff !== 0) return typeDiff;
+            return a.name.localeCompare(b.name);
+        });
+
         let html = '';
-        Object.entries(categories).forEach(([categoryKey, category]) => {
-            if (categoryKey === 'drink') {
+        sortedCategories.forEach(category => {
+            if (category.type === 'drink') {
                 // Render drinks grouped by menu_section
                 const sections = Object.keys(category.sections).sort();
                 const drinksWithoutSection = category.products;
                 
                 if (sections.length > 0 || drinksWithoutSection.length > 0) {
                     html += `<div class="menu-category">`;
-                    html += `<h2>${category.name}</h2>`;
+                    html += `<h2>${category.emoji} ${category.name}</h2>`;
                     
                     // Render drinks by section
                     sections.forEach(section => {
-                        html += `<h3 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--deep-brown); font-size: 1.3rem;">${section}</h3>`;
+                        html += `<h3 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--deep-brown); font-size: 1.3rem;">${this.escapeHtml(section)}</h3>`;
                         html += `<div class="menu-line-items">`;
                         category.sections[section].forEach(product => {
                             html += this.renderMenuItem(product);
@@ -139,7 +135,7 @@ class CoffeeClubMenu {
                 if (category.products.length === 0) return;
 
                 html += `<div class="menu-category">`;
-                html += `<h2>${category.name}</h2>`;
+                html += `<h2>${category.emoji} ${this.escapeHtml(category.name)}</h2>`;
                 html += `<div class="menu-line-items">`;
 
                 category.products.forEach(product => {
@@ -154,17 +150,18 @@ class CoffeeClubMenu {
     }
 
     renderMenuItem(product) {
-        const isDrink = product.category === 'drink';
+        const categoryType = product.menu_categories?.type || 'drink';
+        const isDrink = categoryType === 'drink';
         const description = product.description || '';
         const productId = product.id;
         
         return `
             <div class="menu-line-item" data-product-id="${productId}">
                 <div class="menu-line-item-info">
-                    <div class="menu-item-name-text">${product.name}</div>
-                    ${description ? `<div class="menu-item-description">${description}</div>` : ''}
+                    <div class="menu-item-name-text">${this.escapeHtml(product.name)}</div>
+                    ${description ? `<div class="menu-item-description">${this.escapeHtml(description)}</div>` : ''}
                 </div>
-                <div class="menu-line-item-price">$${parseFloat(product.price).toFixed(2)}</div>
+                <div class="menu-line-item-price">$${parseFloat(product.price || 0).toFixed(2)}</div>
                 <div class="menu-line-item-action">
                     ${isDrink ? `
                         <button class="btn btn-sm" onclick="coffeeClubMenu.customizeDrink('${productId}')">
@@ -178,6 +175,23 @@ class CoffeeClubMenu {
                 </div>
             </div>
         `;
+    }
+
+    getCategoryEmoji(type) {
+        const emojis = {
+            'drink': '☕',
+            'food': '🥐',
+            'merch': '🛍️',
+            'ingredient': '✨'
+        };
+        return emojis[type] || '📋';
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     customizeDrink(productId) {
@@ -195,15 +209,16 @@ class CoffeeClubMenu {
         // Create a unique cart item ID that includes customizations
         const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
+        const categoryType = product.menu_categories?.type || 'drink';
         this.cart.push({
             cartItemId: cartItemId,
             productId: product.id,
             name: product.name,
-            category: product.category,
-            basePrice: parseFloat(product.price),
+            category: categoryType,
+            basePrice: parseFloat(product.price || 0),
             priceAdjustment: priceAdjustment,
             finalPrice: finalPrice,
-            taxRate: parseFloat(product.tax_rate),
+            taxRate: parseFloat(product.tax_rate || 0.0825),
             quantity: 1,
             customizations: customizations
         });
@@ -217,7 +232,8 @@ class CoffeeClubMenu {
         if (!product) return;
 
         // For drinks, show customization dialog instead
-        if (product.category === 'drink') {
+        const categoryType = product.menu_categories?.type || 'drink';
+        if (categoryType === 'drink') {
             this.customizeDrink(productId);
             return;
         }
@@ -233,15 +249,16 @@ class CoffeeClubMenu {
             existingItem.quantity += 1;
         } else {
             const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const categoryType = product.menu_categories?.type || 'drink';
             this.cart.push({
                 cartItemId: cartItemId,
                 productId: productId,
                 name: product.name,
-                category: product.category,
-                basePrice: parseFloat(product.price),
+                category: categoryType,
+                basePrice: parseFloat(product.price || 0),
                 priceAdjustment: 0,
-                finalPrice: parseFloat(product.price),
-                taxRate: parseFloat(product.tax_rate),
+                finalPrice: parseFloat(product.price || 0),
+                taxRate: parseFloat(product.tax_rate || 0.0825),
                 quantity: 1,
                 customizations: []
             });
