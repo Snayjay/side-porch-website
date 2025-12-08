@@ -14,7 +14,12 @@ CREATE TABLE IF NOT EXISTS site_config (
 INSERT INTO site_config (config_key, config_value, description) VALUES
 ('supabase_url', '', 'Supabase Project URL'),
 ('supabase_anon_key', '', 'Supabase Anonymous/Public Key'),
-('stripe_publishable_key', '', 'Stripe Publishable Key')
+('stripe_publishable_key', '', 'Stripe Publishable Key'),
+('module_coffee_club_enabled', 'true', 'Enable/disable Coffee Club ordering system module'),
+('module_menu_enabled', 'true', 'Enable/disable Menu page module'),
+('module_about_enabled', 'true', 'Enable/disable About page module'),
+('module_contact_enabled', 'true', 'Enable/disable Contact page module'),
+('social_platforms', '[]', 'Social media platform configurations (JSON array)')
 ON CONFLICT (config_key) DO NOTHING;
 
 -- Index for faster lookups

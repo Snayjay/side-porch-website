@@ -19,25 +19,53 @@ class CoffeeClubApp {
         this.setupAuthUI();
         this.setupFundingUI();
 
-        // Wait for config to be ready
-        if (configManager.isSupabaseConfigured()) {
-            // Wait for Supabase to be ready
-            window.addEventListener('supabaseReady', async () => {
-                this.setupAuthUI();
-                this.setupAccountUI();
-                
-                // Check if already authenticated and verified
+        // Helper function to initialize authenticated state
+        const initializeAuthenticatedState = async () => {
+            this.setupAuthUI();
+            this.setupAccountUI();
+            
+            // Check if already authenticated and verified
+            try {
                 const user = await authManager.getCurrentUser();
                 if (user) {
                     this.handleAuthStateChange(user);
                 }
-            });
-
-            // Check if already authenticated
-            const user = await authManager.getCurrentUser();
-            if (user) {
-                this.handleAuthStateChange(user);
+            } catch (error) {
+                console.error('Error checking auth state:', error);
             }
+        };
+
+        // Listen for config to be loaded and update UI accordingly
+        window.addEventListener('configLoaded', () => {
+            this.setupAuthUI();
+            if (configManager.isSupabaseConfigured()) {
+                // Wait for Supabase to be ready
+                window.addEventListener('supabaseReady', initializeAuthenticatedState, { once: true });
+
+                // Fallback: Check if Supabase is already ready (in case event fired before listener was added)
+                setTimeout(async () => {
+                    const client = getSupabaseClient();
+                    if (client) {
+                        // Supabase is ready, initialize state
+                        await initializeAuthenticatedState();
+                    }
+                }, 200);
+            }
+        }, { once: true });
+
+        // Also check if config is already loaded (in case event fired before listener was added)
+        if (configManager.isSupabaseConfigured()) {
+            // Wait for Supabase to be ready
+            window.addEventListener('supabaseReady', initializeAuthenticatedState, { once: true });
+
+            // Fallback: Check if Supabase is already ready
+            setTimeout(async () => {
+                const client = getSupabaseClient();
+                if (client) {
+                    // Supabase is ready, initialize state
+                    await initializeAuthenticatedState();
+                }
+            }, 200);
         }
 
         // Listen for auth state changes
@@ -137,17 +165,65 @@ class CoffeeClubApp {
             signinEmailContainer.appendChild(emailInput);
         }
 
-        // Create sign-in password field
+        // Create sign-in password field with show/hide toggle
         const signinPasswordContainer = document.getElementById('signin-password-container');
-        if (signinPasswordContainer && !signinPasswordContainer.querySelector('input')) {
+        if (signinPasswordContainer && !signinPasswordContainer.querySelector('#signin-password')) {
+            // Create wrapper for password input and toggle button
+            const passwordWrapper = document.createElement('div');
+            passwordWrapper.style.cssText = 'position: relative; width: 100%;';
+            
             const passwordInput = document.createElement('input');
             passwordInput.type = 'password';
             passwordInput.id = 'signin-password';
             passwordInput.setAttribute('data-auth-field', 'password');
             passwordInput.placeholder = 'Password';
             passwordInput.autocomplete = 'new-password';
-            passwordInput.style.cssText = 'width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem; background-color: white !important;';
-            signinPasswordContainer.appendChild(passwordInput);
+            passwordInput.style.cssText = 'width: 100%; padding: 0.9rem 3rem 0.9rem 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem; background-color: white !important;';
+            
+            // Create toggle button
+            const toggleButton = document.createElement('button');
+            toggleButton.type = 'button';
+            toggleButton.setAttribute('aria-label', 'Show password');
+            toggleButton.style.cssText = 'position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 0.5rem; color: var(--text-dark); opacity: 0.6; transition: opacity 0.3s ease; display: flex; align-items: center; justify-content: center;';
+            toggleButton.innerHTML = `
+                <svg id="signin-password-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            `;
+            
+            toggleButton.addEventListener('click', () => {
+                const isPassword = passwordInput.type === 'password';
+                passwordInput.type = isPassword ? 'text' : 'password';
+                const icon = toggleButton.querySelector('svg');
+                if (isPassword) {
+                    // Show eye-off icon
+                    icon.innerHTML = `
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                    `;
+                    toggleButton.setAttribute('aria-label', 'Hide password');
+                } else {
+                    // Show eye icon
+                    icon.innerHTML = `
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    `;
+                    toggleButton.setAttribute('aria-label', 'Show password');
+                }
+            });
+            
+            toggleButton.addEventListener('mouseenter', () => {
+                toggleButton.style.opacity = '1';
+            });
+            
+            toggleButton.addEventListener('mouseleave', () => {
+                toggleButton.style.opacity = '0.6';
+            });
+            
+            passwordWrapper.appendChild(passwordInput);
+            passwordWrapper.appendChild(toggleButton);
+            signinPasswordContainer.appendChild(passwordWrapper);
         }
 
         // Create sign-up name field
@@ -179,17 +255,65 @@ class CoffeeClubApp {
             signupEmailContainer.appendChild(emailInput);
         }
 
-        // Create sign-up password field
+        // Create sign-up password field with show/hide toggle
         const signupPasswordContainer = document.getElementById('signup-password-container');
-        if (signupPasswordContainer && !signupPasswordContainer.querySelector('input')) {
+        if (signupPasswordContainer && !signupPasswordContainer.querySelector('#signup-password')) {
+            // Create wrapper for password input and toggle button
+            const passwordWrapper = document.createElement('div');
+            passwordWrapper.style.cssText = 'position: relative; width: 100%;';
+            
             const passwordInput = document.createElement('input');
             passwordInput.type = 'password';
             passwordInput.id = 'signup-password';
             passwordInput.setAttribute('data-auth-field', 'password');
             passwordInput.placeholder = 'Password (min 6 characters)';
             passwordInput.autocomplete = 'new-password';
-            passwordInput.style.cssText = 'width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem; background-color: white !important;';
-            signupPasswordContainer.appendChild(passwordInput);
+            passwordInput.style.cssText = 'width: 100%; padding: 0.9rem 3rem 0.9rem 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem; background-color: white !important;';
+            
+            // Create toggle button
+            const toggleButton = document.createElement('button');
+            toggleButton.type = 'button';
+            toggleButton.setAttribute('aria-label', 'Show password');
+            toggleButton.style.cssText = 'position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; padding: 0.5rem; color: var(--text-dark); opacity: 0.6; transition: opacity 0.3s ease; display: flex; align-items: center; justify-content: center;';
+            toggleButton.innerHTML = `
+                <svg id="signup-password-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            `;
+            
+            toggleButton.addEventListener('click', () => {
+                const isPassword = passwordInput.type === 'password';
+                passwordInput.type = isPassword ? 'text' : 'password';
+                const icon = toggleButton.querySelector('svg');
+                if (isPassword) {
+                    // Show eye-off icon
+                    icon.innerHTML = `
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                    `;
+                    toggleButton.setAttribute('aria-label', 'Hide password');
+                } else {
+                    // Show eye icon
+                    icon.innerHTML = `
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    `;
+                    toggleButton.setAttribute('aria-label', 'Show password');
+                }
+            });
+            
+            toggleButton.addEventListener('mouseenter', () => {
+                toggleButton.style.opacity = '1';
+            });
+            
+            toggleButton.addEventListener('mouseleave', () => {
+                toggleButton.style.opacity = '0.6';
+            });
+            
+            passwordWrapper.appendChild(passwordInput);
+            passwordWrapper.appendChild(toggleButton);
+            signupPasswordContainer.appendChild(passwordWrapper);
         }
     }
 
@@ -290,6 +414,7 @@ class CoffeeClubApp {
     showEmailVerificationMessage(email) {
         const authSection = document.getElementById('auth-section');
         const authContainer = document.getElementById('auth-container');
+        const menuCartSection = document.getElementById('menu-cart-section');
         if (!authSection || !authContainer) return;
 
         // Show auth section and hide account sections
@@ -298,6 +423,7 @@ class CoffeeClubApp {
         document.getElementById('account-section').style.display = 'none';
         document.getElementById('funding-section').style.display = 'none';
         document.getElementById('order-history-section').style.display = 'none';
+        if (menuCartSection) menuCartSection.style.display = 'none'; // Hide menu and cart
         
         const configWarning = !configManager.isSupabaseConfigured() ? `
             <div style="background: rgba(160, 82, 45, 0.1); border: 1px solid var(--auburn); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;">
@@ -501,6 +627,8 @@ class CoffeeClubApp {
     }
 
     async handleAuthStateChange(user) {
+        const menuCartSection = document.getElementById('menu-cart-section');
+        
         if (user) {
             // Check if email is verified
             if (!authManager.isEmailVerified()) {
@@ -510,6 +638,7 @@ class CoffeeClubApp {
                 document.getElementById('account-section').style.display = 'none';
                 document.getElementById('funding-section').style.display = 'none';
                 document.getElementById('order-history-section').style.display = 'none';
+                if (menuCartSection) menuCartSection.style.display = 'none';
                 
                 this.showEmailVerificationMessage(user.email);
                 return;
@@ -519,8 +648,14 @@ class CoffeeClubApp {
             document.getElementById('auth-section').style.display = 'none';
             document.getElementById('welcome-section').style.display = 'block';
             document.getElementById('account-section').style.display = 'block';
-            document.getElementById('funding-section').style.display = 'block';
+            const fundingSection = document.getElementById('funding-section');
+            if (fundingSection) {
+                fundingSection.style.display = 'block';
+                // Ensure accordion starts collapsed
+                fundingSection.classList.remove('expanded');
+            }
             document.getElementById('order-history-section').style.display = 'block';
+            if (menuCartSection) menuCartSection.style.display = 'grid'; // Show menu and cart
 
             // Reset activity timer and start monitoring
             this.lastActivityTime = Date.now();
@@ -529,6 +664,7 @@ class CoffeeClubApp {
 
             await this.updateAccountDisplay();
             await this.updateOrderHistory();
+            await this.updateAdminLinkVisibility();
         } else {
             // User is not authenticated
             this.clearInactivityTimer();
@@ -539,9 +675,25 @@ class CoffeeClubApp {
             document.getElementById('account-section').style.display = 'none';
             document.getElementById('funding-section').style.display = 'none';
             document.getElementById('order-history-section').style.display = 'none';
+            if (menuCartSection) menuCartSection.style.display = 'none'; // Hide menu and cart
 
             this.setupAuthUI();
+            this.updateAdminLinkVisibility();
         }
+    }
+
+    async updateAdminLinkVisibility() {
+        // Update admin link visibility in navigation
+        const adminLinks = document.querySelectorAll('.admin-nav-link');
+        const isStaff = await adminManager.isStaff();
+        
+        adminLinks.forEach(link => {
+            if (isStaff) {
+                link.style.display = '';
+            } else {
+                link.style.display = 'none';
+            }
+        });
     }
 
     async updateAccountDisplay() {
@@ -617,14 +769,64 @@ class CoffeeClubApp {
             </div>
             <div id="funding-payment-form" style="display: none; margin-top: 2rem;">
                 <h3>Payment Information</h3>
-                <div id="card-element" style="margin: 1rem 0;">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="billing-name">Cardholder Name *</label>
+                    <input type="text" id="billing-name" placeholder="John Doe" required style="width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem;">
+                </div>
+                <div id="card-element" style="margin: 1rem 0;" autocomplete="off">
                     <!-- Stripe card element will be mounted here -->
                 </div>
-                <div id="card-errors" style="color: var(--auburn); margin-bottom: 1rem;"></div>
+                <style>
+                    /* Hide browser autofill suggestions on Stripe Elements */
+                    #card-element iframe {
+                        pointer-events: auto;
+                    }
+                    /* Hide autofill dropdown that browsers show */
+                    input:-webkit-autofill,
+                    input:-webkit-autofill:hover,
+                    input:-webkit-autofill:focus {
+                        -webkit-box-shadow: 0 0 0px 1000px white inset !important;
+                    }
+                </style>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="billing-address-line1">Billing Address Line 1 *</label>
+                    <input type="text" id="billing-address-line1" placeholder="123 Main St" required style="width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem;">
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="billing-address-line2">Billing Address Line 2</label>
+                    <input type="text" id="billing-address-line2" placeholder="Apt 4B (optional)" style="width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem;">
+                </div>
+                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label for="billing-city">City *</label>
+                        <input type="text" id="billing-city" placeholder="City" required style="width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem;">
+                    </div>
+                    <div class="form-group">
+                        <label for="billing-state">State *</label>
+                        <input type="text" id="billing-state" placeholder="TX" maxlength="2" required style="width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem;">
+                    </div>
+                    <div class="form-group">
+                        <label for="billing-postal-code">ZIP *</label>
+                        <input type="text" id="billing-postal-code" placeholder="77840" pattern="[0-9]{5}(-[0-9]{4})?" required style="width: 100%; padding: 0.9rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 8px; font-family: inherit; font-size: 1rem;">
+                    </div>
+                </div>
+                <div id="card-errors" style="color: var(--auburn); margin-bottom: 1rem; min-height: 1.5rem; font-size: 0.9rem; display: none;"></div>
                 <button class="btn" onclick="coffeeClubApp.processFunding()">Complete Payment</button>
                 <button class="btn btn-secondary" onclick="coffeeClubApp.cancelFunding()" style="margin-left: 1rem;">Cancel</button>
             </div>
         `;
+    }
+
+    toggleFundingAccordion() {
+        const fundingSection = document.getElementById('funding-section');
+        if (!fundingSection) return;
+
+        const isExpanded = fundingSection.classList.contains('expanded');
+        if (isExpanded) {
+            fundingSection.classList.remove('expanded');
+        } else {
+            fundingSection.classList.add('expanded');
+        }
     }
 
     setupAccountUI() {
@@ -691,17 +893,26 @@ class CoffeeClubApp {
                 authManager.currentUser.id
             );
         } catch (error) {
-            errorDialog.show(
-                error.message + '<br><br>' +
-                '<strong>Setup Required:</strong><br>' +
-                'You need to create a backend endpoint that creates Stripe PaymentIntents. ' +
-                'Options include:<br>' +
-                '• Supabase Edge Function<br>' +
-                '• Serverless function (Vercel, Netlify, etc.)<br>' +
-                '• Your own backend API<br><br>' +
-                'The endpoint should use your Stripe secret key to create a PaymentIntent and return the client_secret.',
-                'Backend Endpoint Required'
-            );
+            const isBackendError = error.message.includes('Backend endpoint') || 
+                                  error.message.includes('endpoint not found') ||
+                                  error.message.includes('Failed to fetch');
+            
+            if (isBackendError) {
+                errorDialog.show(
+                    error.message + '<br><br>' +
+                    '<strong style="color: var(--auburn);">Setup Required:</strong><br>' +
+                    'You need to create a backend endpoint that creates Stripe PaymentIntents. Options include:<br><br>' +
+                    '• <strong>Supabase Edge Function</strong> (recommended)<br>' +
+                    '• Serverless function (Vercel, Netlify, etc.)<br>' +
+                    '• Your own backend API<br><br>' +
+                    'The endpoint should use your Stripe secret key to create a PaymentIntent and return the client_secret.<br><br>' +
+                    '📄 See <code style="background: rgba(139, 111, 71, 0.1); padding: 2px 6px; border-radius: 4px;">supabase-edge-function-example.md</code> for detailed setup instructions.',
+                    'Backend Endpoint Required',
+                    true // Allow HTML formatting
+                );
+            } else {
+                errorDialog.show(error.message, 'Payment Error');
+            }
             return;
         }
 
@@ -726,7 +937,14 @@ class CoffeeClubApp {
                 errorDialog.show('Error funding account: ' + (fundResult.error || 'Please try again.'), 'Funding Error');
             }
         } else {
-            document.getElementById('card-errors').textContent = paymentResult.error;
+            // Show payment error (including declined cards) in error dialog for better visibility
+            const errorMessage = paymentResult.error || 'Payment failed. Please check your card details and try again.';
+            errorDialog.show(errorMessage, 'Payment Failed');
+            // Also show in card-errors div for inline display
+            const cardErrorsDiv = document.getElementById('card-errors');
+            if (cardErrorsDiv) {
+                cardErrorsDiv.textContent = errorMessage;
+            }
         }
     }
 
@@ -740,7 +958,18 @@ class CoffeeClubApp {
         if (cardElement) {
             cardElement.innerHTML = '';
         }
-        document.getElementById('card-errors').textContent = '';
+        const cardErrors = document.getElementById('card-errors');
+        if (cardErrors) {
+            cardErrors.textContent = '';
+        }
+        
+        // Clear billing form fields
+        const billingFields = ['billing-name', 'billing-address-line1', 'billing-address-line2', 
+                              'billing-city', 'billing-state', 'billing-postal-code'];
+        billingFields.forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) field.value = '';
+        });
     }
 
     async updateOrderHistory() {

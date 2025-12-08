@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Admin Dashboard - Coffee Club Management">
+    <title>Admin - Side Porch Coffee Co.</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="coffee-club.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="index.html" class="logo"><img src="./assets/badge.png" alt="Side Porch Coffee Co."></a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="menu.html">Menu</a></li>
+                <li><a href="coffee-club.html">Coffee Club</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="contact.html">Contact</a></li>
+                <li class="admin-nav-link" style="display: none;"><a href="admin.html">Admin</a></li>
+                <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="section">
+            <h1 class="section-title">Admin Dashboard</h1>
+            <div id="admin-content" class="content-card">
+                <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading...</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 <a href="http://www.jeffreyloehr.com/2KMJ-Studios" class="footer-link">2KMJ-Studios</a>. All rights reserved.</p>
+        <p>Brewed with ❤️ in our small town</p>
+        <div class="social-links"></div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // CRITICAL: Log immediately when script tag executes
+        console.log('=== ADMIN.HTML SCRIPT LOADING ===');
+        console.log('Admin page: Script tag executing NOW');
+        console.log('Admin page: URL:', window.location.href);
+        console.log('Admin page: readyState:', document.readyState);
+    </script>
+    <script src="config.local.js" onerror="console.log('config.local.js not found, using browser-based configuration')"></script>
+    <script src="js/config.js"></script>
+    <script src="js/error-dialog.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/account-manager.js"></script>
+    <script src="js/admin-manager.js"></script>
+    <script src="js/admin-ui.js"></script>
+    <script src="js/dev-manager.js"></script>
+    <script>
+        // CRITICAL: Log after all scripts loaded
+        console.log('=== ADMIN.HTML ALL SCRIPTS LOADED ===');
+        console.log('Admin page: All script files loaded');
+        console.log('Admin page: configManager exists?', typeof configManager !== 'undefined');
+        console.log('Admin page: adminUI exists?', typeof adminUI !== 'undefined');
+        
+        // Initialize admin UI when page loads
+        (async () => {
+            console.log('Admin page: Async init function starting, readyState:', document.readyState);
+            console.log('Admin page: Supabase configured?', typeof configManager !== 'undefined' && configManager.isSupabaseConfigured());
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', async () => {
+                    console.log('Admin page: DOMContentLoaded fired');
+                    if (typeof configManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                        await authManager.getCurrentUser();
+                        await adminUI.init();
+                    } else {
+                        console.error('Admin page: Supabase not configured');
+                        const container = document.getElementById('admin-content');
+                        if (container) {
+                            container.innerHTML = '<p style="text-align: center; color: var(--auburn);">Supabase is not configured. Please configure it first.</p>';
+                        }
+                    }
+                });
+            } else {
+                console.log('Admin page: DOM already loaded, initializing immediately');
+                if (typeof configManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                    await authManager.getCurrentUser();
+                    await adminUI.init();
+                } else {
+                    console.error('Admin page: Supabase not configured');
+                    const container = document.getElementById('admin-content');
+                    if (container) {
+                        container.innerHTML = '<p style="text-align: center; color: var(--auburn);">Supabase is not configured. Please configure it first.</p>';
+                    }
+                }
+            }
+        })();
+
+        // Update admin and dev link visibility
+        window.addEventListener('supabaseReady', async () => {
+            // Show admin link if user is staff
+            if (typeof adminManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                await authManager.getCurrentUser();
+                const isStaff = await adminManager.isStaff();
+                document.querySelectorAll('.admin-nav-link').forEach(link => {
+                    link.style.display = isStaff ? '' : 'none';
+                });
+            }
+            
+            // Show dev link if user is developer
+            if (typeof devManager !== 'undefined') {
+                await authManager.getCurrentUser();
+                const isDev = await devManager.isDeveloper();
+                document.querySelectorAll('.dev-nav-link').forEach(link => {
+                    link.style.display = isDev ? '' : 'none';
+                });
+                await devManager.updateNavigationVisibility();
+                await devManager.updateFooterSocialLinks();
+            }
+        });
+        
+        // Also check on DOMContentLoaded if Supabase is already ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', async () => {
+                if (typeof adminManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                    await authManager.getCurrentUser();
+                    const isStaff = await adminManager.isStaff();
+                    document.querySelectorAll('.admin-nav-link').forEach(link => {
+                        link.style.display = isStaff ? '' : 'none';
+                    });
+                }
+                if (typeof devManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                    await authManager.getCurrentUser();
+                    const isDev = await devManager.isDeveloper();
+                    document.querySelectorAll('.dev-nav-link').forEach(link => {
+                        link.style.display = isDev ? '' : 'none';
+                    });
+                }
+            });
+        } else {
+            // DOM already loaded, check immediately
+            (async () => {
+                if (typeof adminManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                    await authManager.getCurrentUser();
+                    const isStaff = await adminManager.isStaff();
+                    document.querySelectorAll('.admin-nav-link').forEach(link => {
+                        link.style.display = isStaff ? '' : 'none';
+                    });
+                }
+                if (typeof devManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+                    await authManager.getCurrentUser();
+                    const isDev = await devManager.isDeveloper();
+                    document.querySelectorAll('.dev-nav-link').forEach(link => {
+                        link.style.display = isDev ? '' : 'none';
+                    });
+                }
+            })();
+        }
+    </script>
+</body>
+</html>
+

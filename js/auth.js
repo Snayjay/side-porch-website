@@ -94,6 +94,21 @@ class AuthManager {
         }
 
         try {
+            // First, try to get the session (this restores it from storage if available)
+            const { data: { session }, error: sessionError } = await client.auth.getSession();
+            
+            if (sessionError) {
+                console.warn('Get session error:', sessionError);
+            }
+            
+            // If we have a session, use the user from it
+            if (session?.user) {
+                this.currentUser = session.user;
+                this.saveUserToStorage();
+                return session.user;
+            }
+            
+            // If no session, try getUser() as fallback
             const { data: { user }, error } = await client.auth.getUser();
             if (error) throw error;
             
@@ -103,6 +118,12 @@ class AuthManager {
             }
             return user;
         } catch (error) {
+            // AuthSessionMissingError is expected when no user is signed in - don't log it
+            if (error?.message?.includes('Auth session missing') || error?.name === 'AuthSessionMissingError') {
+                // This is normal - no user is signed in
+                return null;
+            }
+            // Log other unexpected errors
             console.error('Get user error:', error);
             return null;
         }

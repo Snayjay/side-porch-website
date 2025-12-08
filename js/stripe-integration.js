@@ -45,6 +45,9 @@ class StripeManager {
                     throw new Error('Not authenticated');
                 }
 
+                // Get user email for receipt
+                const user = await authManager.getCurrentUser();
+                
                 // Try calling Supabase Edge Function
                 const response = await fetch(
                     `${supabaseConfig.url}/functions/v1/create-payment-intent`,
@@ -57,7 +60,10 @@ class StripeManager {
                         },
                         body: JSON.stringify({
                             amount: amount,
-                            accountId: accountId
+                            accountId: accountId,
+                            currency: 'usd', // Required: ISO currency code
+                            description: `Coffee Club account funding: $${amount.toFixed(2)}`,
+                            receiptEmail: user?.email || undefined // Recommended: email for receipt
                         })
                     }
                 );
@@ -94,24 +100,41 @@ class StripeManager {
         );
     }
 
-    async confirmPayment(clientSecret, paymentMethod) {
+    async confirmPayment(clientSecret, paymentMethodId) {
         if (!this.stripe) {
             throw new Error('Stripe not initialized');
         }
 
         try {
+            // Get return URL for 3D Secure authentication redirects (required for some payment methods)
+            const returnUrl = `${window.location.origin}${window.location.pathname}`;
+
             const { error, paymentIntent } = await this.stripe.confirmCardPayment(clientSecret, {
-                payment_method: paymentMethod
+                payment_method: paymentMethodId,
+                return_url: returnUrl // Required for 3D Secure authentication redirects
             });
 
             if (error) {
-                throw error;
+                // Return detailed error information including decline codes
+                return { 
+                    success: false, 
+                    error: error.message || 'Payment failed',
+                    declineCode: error.decline_code,
+                    code: error.code,
+                    type: error.type
+                };
             }
 
             return { success: true, paymentIntent };
         } catch (error) {
             console.error('Payment confirmation error:', error);
-            return { success: false, error: error.message };
+            return { 
+                success: false, 
+                error: error.message || 'Payment confirmation failed',
+                declineCode: error.decline_code,
+                code: error.code,
+                type: error.type
+            };
         }
     }
 
@@ -139,6 +162,29 @@ class StripeManager {
         const container = document.getElementById(containerId);
         if (container) {
             this.cardElement.mount(container);
+            
+            // Listen for real-time validation errors
+            this.cardElement.on('change', (event) => {
+                const cardErrors = document.getElementById('card-errors');
+                if (cardErrors) {
+                    if (event.error) {
+                        cardErrors.textContent = event.error.message;
+                        cardErrors.style.display = 'block';
+                    } else {
+                        cardErrors.textContent = '';
+                        cardErrors.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Also listen for focus events to potentially hide autofill
+            this.cardElement.on('focus', () => {
+                // Try to prevent browser autofill suggestions
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.setAttribute('autocomplete', 'off');
+                }
+            });
         }
 
         return this.cardElement;
@@ -150,9 +196,53 @@ class StripeManager {
         }
 
         try {
+            // Get billing information from form fields
+            const billingName = document.getElementById('billing-name')?.value?.trim();
+            const addressLine1 = document.getElementById('billing-address-line1')?.value?.trim();
+            const addressLine2 = document.getElementById('billing-address-line2')?.value?.trim();
+            const city = document.getElementById('billing-city')?.value?.trim();
+            const state = document.getElementById('billing-state')?.value?.trim();
+            const postalCode = document.getElementById('billing-postal-code')?.value?.trim();
+            
+            // Get user information for email
+            const user = await authManager.getCurrentUser();
+            const account = await accountManager.getAccount();
+            
+            // Validate required billing fields
+            if (!billingName) {
+                throw new Error('Cardholder name is required');
+            }
+            if (!addressLine1) {
+                throw new Error('Billing address is required');
+            }
+            if (!city) {
+                throw new Error('City is required');
+            }
+            if (!state) {
+                throw new Error('State is required');
+            }
+            if (!postalCode) {
+                throw new Error('ZIP code is required');
+            }
+
+            // Build billing details object (required/recommended for Stripe compliance)
+            const billingDetails = {
+                name: billingName,
+                email: user?.email || '',
+                address: {
+                    line1: addressLine1,
+                    line2: addressLine2 || undefined,
+                    city: city,
+                    state: state,
+                    postal_code: postalCode,
+                    country: 'US' // Default to US, can be made configurable
+                }
+            };
+
             const { paymentMethod, error } = await this.stripe.createPaymentMethod({
                 type: 'card',
                 card: this.cardElement,
+                billing_details: billingDetails
             });
 
             if (error) {

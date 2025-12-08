@@ -7,7 +7,7 @@ class ErrorDialog {
         this.isOpen = false;
     }
 
-    show(message, title = 'Error') {
+    show(message, title = 'Error', allowHtml = false) {
         if (this.isOpen) {
             this.close();
         }
@@ -36,12 +36,16 @@ class ErrorDialog {
             background: var(--parchment);
             border-radius: 15px;
             padding: 0;
-            max-width: 500px;
+            max-width: 600px;
             width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
             animation: slideDown 0.3s ease;
             border: 2px solid var(--auburn);
         `;
+
+        const messageContent = allowHtml ? message : this.escapeHtml(message);
 
         dialog.innerHTML = `
             <div style="padding: 1.5rem; border-bottom: 2px solid rgba(139, 111, 71, 0.2);">
@@ -54,9 +58,9 @@ class ErrorDialog {
                 </div>
             </div>
             <div style="padding: 1.5rem;">
-                <p style="color: var(--text-dark); margin: 0; line-height: 1.6; font-size: 1rem;">
-                    ${this.escapeHtml(message)}
-                </p>
+                <div style="color: var(--text-dark); margin: 0; line-height: 1.6; font-size: 1rem;">
+                    ${messageContent}
+                </div>
             </div>
             <div style="padding: 1rem 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2); display: flex; justify-content: flex-end;">
                 <button class="btn" onclick="errorDialog.close()" style="min-width: 100px;">OK</button>

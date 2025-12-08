@@ -75,8 +75,9 @@ class CoffeeClubMenu {
         const container = document.getElementById('coffee-club-menu-container');
         if (!container) return;
 
+        // Group products by category first, then by menu_section for drinks
         const categories = {
-            drink: { name: '☕ Drinks', products: [] },
+            drink: { name: '☕ Drinks', products: [], sections: {} },
             food: { name: '🥐 Food', products: [] },
             ingredient: { name: '🛒 Ingredients', products: [] },
             merch: { name: '👕 Merchandise', products: [] }
@@ -84,49 +85,99 @@ class CoffeeClubMenu {
 
         this.products.forEach(product => {
             if (categories[product.category]) {
-                categories[product.category].products.push(product);
+                if (product.category === 'drink' && product.menu_section) {
+                    // Group drinks by menu_section
+                    const section = product.menu_section;
+                    if (!categories.drink.sections[section]) {
+                        categories.drink.sections[section] = [];
+                    }
+                    categories.drink.sections[section].push(product);
+                } else {
+                    // Non-drinks or drinks without menu_section go to main category
+                    categories[product.category].products.push(product);
+                }
             }
         });
 
         let html = '';
-        Object.values(categories).forEach(category => {
-            if (category.products.length === 0) return;
-
-            html += `<div class="menu-category">`;
-            html += `<h2>${category.name}</h2>`;
-            html += `<div class="menu-line-items">`;
-
-            category.products.forEach(product => {
-                const isDrink = product.category === 'drink';
-                const description = product.description || '';
-                const productId = product.id;
+        Object.entries(categories).forEach(([categoryKey, category]) => {
+            if (categoryKey === 'drink') {
+                // Render drinks grouped by menu_section
+                const sections = Object.keys(category.sections).sort();
+                const drinksWithoutSection = category.products;
                 
-                html += `
-                    <div class="menu-line-item" data-product-id="${productId}">
-                        <div class="menu-line-item-info">
-                            <div class="menu-item-name-text">${product.name}</div>
-                            ${description ? `<div class="menu-item-description">${description}</div>` : ''}
-                        </div>
-                        <div class="menu-line-item-price">$${product.price.toFixed(2)}</div>
-                        <div class="menu-line-item-action">
-                            ${isDrink ? `
-                                <button class="btn btn-sm" onclick="coffeeClubMenu.customizeDrink('${productId}')">
-                                    Customize
-                                </button>
-                            ` : `
-                                <button class="btn btn-sm" onclick="coffeeClubMenu.addToCart('${productId}')">
-                                    Add
-                                </button>
-                            `}
-                        </div>
-                    </div>
-                `;
-            });
+                if (sections.length > 0 || drinksWithoutSection.length > 0) {
+                    html += `<div class="menu-category">`;
+                    html += `<h2>${category.name}</h2>`;
+                    
+                    // Render drinks by section
+                    sections.forEach(section => {
+                        html += `<h3 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--deep-brown); font-size: 1.3rem;">${section}</h3>`;
+                        html += `<div class="menu-line-items">`;
+                        category.sections[section].forEach(product => {
+                            html += this.renderMenuItem(product);
+                        });
+                        html += `</div>`;
+                    });
+                    
+                    // Render drinks without a section
+                    if (drinksWithoutSection.length > 0) {
+                        if (sections.length > 0) {
+                            html += `<h3 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--deep-brown); font-size: 1.3rem;">Other</h3>`;
+                        }
+                        html += `<div class="menu-line-items">`;
+                        drinksWithoutSection.forEach(product => {
+                            html += this.renderMenuItem(product);
+                        });
+                        html += `</div>`;
+                    }
+                    
+                    html += `</div>`;
+                }
+            } else {
+                // Render other categories normally
+                if (category.products.length === 0) return;
 
-            html += `</div></div>`;
+                html += `<div class="menu-category">`;
+                html += `<h2>${category.name}</h2>`;
+                html += `<div class="menu-line-items">`;
+
+                category.products.forEach(product => {
+                    html += this.renderMenuItem(product);
+                });
+
+                html += `</div></div>`;
+            }
         });
 
         container.innerHTML = html;
+    }
+
+    renderMenuItem(product) {
+        const isDrink = product.category === 'drink';
+        const description = product.description || '';
+        const productId = product.id;
+        
+        return `
+            <div class="menu-line-item" data-product-id="${productId}">
+                <div class="menu-line-item-info">
+                    <div class="menu-item-name-text">${product.name}</div>
+                    ${description ? `<div class="menu-item-description">${description}</div>` : ''}
+                </div>
+                <div class="menu-line-item-price">$${parseFloat(product.price).toFixed(2)}</div>
+                <div class="menu-line-item-action">
+                    ${isDrink ? `
+                        <button class="btn btn-sm" onclick="coffeeClubMenu.customizeDrink('${productId}')">
+                            Customize
+                        </button>
+                    ` : `
+                        <button class="btn btn-sm" onclick="coffeeClubMenu.addToCart('${productId}')">
+                            Add
+                        </button>
+                    `}
+                </div>
+            </div>
+        `;
     }
 
     customizeDrink(productId) {

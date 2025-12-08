@@ -186,22 +186,6 @@ class DrinkCustomizer {
         const content = this.modal.querySelector('#customization-content');
         if (!content) return;
 
-        // Group ingredients by category
-        const categories = {
-            espresso: { name: '☕ Espresso', ingredients: [] },
-            syrup: { name: '🍯 Syrups', ingredients: [] },
-            liquid: { name: '🥛 Liquids', ingredients: [] },
-            sweetener: { name: '🍬 Sweeteners', ingredients: [] },
-            topping: { name: '✨ Toppings', ingredients: [] },
-            milk: { name: '🥛 Milk Options', ingredients: [] },
-            other: { name: '➕ Other', ingredients: [] }
-        };
-
-        this.ingredients.forEach(ingredient => {
-            const category = categories[ingredient.category] || categories.other;
-            category.ingredients.push(ingredient);
-        });
-
         // Initialize customizations with default amounts
         this.ingredients.forEach(ingredient => {
             const drinkIng = this.drinkIngredients[ingredient.id];
@@ -214,15 +198,57 @@ class DrinkCustomizer {
 
         let html = '';
 
+        // Render recipe section (original ingredients)
+        html += this.renderRecipeSection();
+
+        // Add visual separator
+        html += `<div style="margin: 2rem 0; border-top: 2px solid rgba(139, 111, 71, 0.3);"></div>`;
+
+        // Render additional ingredients section
+        html += this.renderAdditionalIngredientsSection();
+
+        content.innerHTML = html;
+        this.updateTotal();
+    }
+
+    renderRecipeSection() {
+        // Get ingredients that are in the original recipe (drink_ingredients)
+        const recipeIngredients = this.ingredients.filter(ingredient => 
+            this.drinkIngredients[ingredient.id] && this.drinkIngredients[ingredient.id].defaultAmount > 0
+        );
+
+        if (recipeIngredients.length === 0) {
+            return '<div style="margin-bottom: 2rem;"><h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.1rem;">Recipe Ingredients</h3><p style="color: var(--text-dark); opacity: 0.7; font-style: italic;">No recipe ingredients configured for this drink.</p></div>';
+        }
+
+        // Group recipe ingredients by category
+        const categories = {
+            base_drinks: { name: '☕ Base Drinks', ingredients: [] },
+            sugars: { name: '🍬 Sugars', ingredients: [] },
+            liquid_creamers: { name: '🥛 Liquid Creamers', ingredients: [] },
+            toppings: { name: '✨ Toppings', ingredients: [] },
+            add_ins: { name: '➕ Add-ins', ingredients: [] }
+        };
+
+        recipeIngredients.forEach(ingredient => {
+            const category = categories[ingredient.category] || categories.add_ins;
+            category.ingredients.push(ingredient);
+        });
+
+        let html = '<div style="margin-bottom: 2rem;">';
+        html += '<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">Recipe Ingredients</h3>';
+        html += '<p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem; margin-bottom: 1rem;">Adjust the original recipe ingredients:</p>';
+
         Object.values(categories).forEach(category => {
             if (category.ingredients.length === 0) return;
 
-            html += `<div style="margin-bottom: 2rem;">`;
-            html += `<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.1rem;">${category.name}</h3>`;
+            html += `<div style="margin-bottom: 1.5rem;">`;
+            html += `<h4 style="color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 1rem; font-weight: 600;">${category.name}</h4>`;
 
             category.ingredients.forEach(ingredient => {
                 const drinkIng = this.drinkIngredients[ingredient.id];
                 const currentAmount = this.customizations[ingredient.id] || 0;
+                const defaultAmount = drinkIng.defaultAmount || 0;
                 const isRequired = drinkIng?.isRequired || false;
                 const isRemovable = drinkIng?.isRemovable !== false;
                 const isAddable = drinkIng?.isAddable !== false;
@@ -230,7 +256,7 @@ class DrinkCustomizer {
                 const cost = parseFloat(ingredient.unit_cost) * currentAmount;
 
                 html += `
-                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--cream); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(139, 111, 71, 0.2);">
+                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--parchment); border-radius: 8px; margin-bottom: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3);">
                         <div style="flex: 1;">
                             <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">
                                 ${ingredient.name}
@@ -239,6 +265,7 @@ class DrinkCustomizer {
                             <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">
                                 ${unitLabel} • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(ingredient.unit_type)}
                                 ${cost > 0 ? ` • $${cost.toFixed(2)}` : ''}
+                                ${defaultAmount > 0 ? ` <span style="opacity: 0.6;">(default: ${defaultAmount})</span>` : ''}
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -257,8 +284,80 @@ class DrinkCustomizer {
             html += `</div>`;
         });
 
-        content.innerHTML = html;
-        this.updateTotal();
+        html += '</div>';
+        return html;
+    }
+
+    renderAdditionalIngredientsSection() {
+        // Get ingredients that are NOT in the original recipe
+        const additionalIngredients = this.ingredients.filter(ingredient => 
+            !this.drinkIngredients[ingredient.id] || this.drinkIngredients[ingredient.id].defaultAmount === 0
+        );
+
+        if (additionalIngredients.length === 0) {
+            return '';
+        }
+
+        // Group additional ingredients by category
+        const categories = {
+            base_drinks: { name: '☕ Base Drinks', ingredients: [] },
+            sugars: { name: '🍬 Sugars', ingredients: [] },
+            liquid_creamers: { name: '🥛 Liquid Creamers', ingredients: [] },
+            toppings: { name: '✨ Toppings', ingredients: [] },
+            add_ins: { name: '➕ Add-ins', ingredients: [] }
+        };
+
+        additionalIngredients.forEach(ingredient => {
+            const category = categories[ingredient.category] || categories.add_ins;
+            category.ingredients.push(ingredient);
+        });
+
+        let html = '<div style="margin-bottom: 2rem;">';
+        html += '<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">Add More Ingredients</h3>';
+        html += '<p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem; margin-bottom: 1rem;">Add additional ingredients to customize your drink:</p>';
+
+        Object.values(categories).forEach(category => {
+            if (category.ingredients.length === 0) return;
+
+            html += `<div style="margin-bottom: 1.5rem;">`;
+            html += `<h4 style="color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 1rem; font-weight: 600;">${category.name}</h4>`;
+
+            category.ingredients.forEach(ingredient => {
+                const drinkIng = this.drinkIngredients[ingredient.id];
+                const currentAmount = this.customizations[ingredient.id] || 0;
+                const isAddable = drinkIng?.isAddable !== false;
+                const unitLabel = this.getUnitLabel(ingredient.unit_type);
+                const cost = parseFloat(ingredient.unit_cost) * currentAmount;
+
+                html += `
+                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--cream); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(139, 111, 71, 0.2);">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">
+                                ${ingredient.name}
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">
+                                ${unitLabel} • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(ingredient.unit_type)}
+                                ${cost > 0 ? ` • $${cost.toFixed(2)}` : ''}
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            ${currentAmount > 0 ? `
+                                <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', -1)" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
+                            ` : '<div style="width: 30px;"></div>'}
+                            <span style="min-width: 40px; text-align: center; font-weight: 600; color: var(--deep-brown);">${currentAmount > 0 ? currentAmount : '0'}</span>
+                            ${isAddable ? `
+                                <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', 1)" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
+                            ` : '<div style="width: 30px;"></div>'}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+        });
+
+        html += '</div>';
+        return html;
     }
 
     adjustIngredient(ingredientId, delta) {
@@ -266,14 +365,24 @@ class DrinkCustomizer {
         if (!ingredient) return;
 
         const drinkIng = this.drinkIngredients[ingredientId];
-        const isRequired = drinkIng?.isRequired || false;
         const currentAmount = this.customizations[ingredientId] || 0;
         const newAmount = Math.max(0, currentAmount + delta);
 
-        // Don't allow removing required ingredients below their default amount
-        if (isRequired && drinkIng) {
-            const minAmount = drinkIng.defaultAmount;
-            if (newAmount < minAmount) return;
+        // Handle recipe ingredients (those in drink_ingredients)
+        if (drinkIng) {
+            const isRequired = drinkIng.isRequired || false;
+            const isRemovable = drinkIng.isRemovable !== false; // Default to true if not specified
+            const defaultAmount = drinkIng.defaultAmount || 0;
+
+            // Don't allow removing required ingredients below their default amount
+            if (isRequired && newAmount < defaultAmount) {
+                return;
+            }
+
+            // Don't allow removing non-removable recipe ingredients below their default amount
+            if (!isRemovable && delta < 0 && newAmount < defaultAmount) {
+                return;
+            }
         }
 
         this.customizations[ingredientId] = newAmount;

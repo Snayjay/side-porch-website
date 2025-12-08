@@ -1,0 +1,12 @@
+# Supabase Edge Functions Configuration
+# This file is used by Supabase CLI for local development
+
+[project]
+# Your Supabase project reference ID
+# You can find this in your Supabase dashboard URL: https://supabase.com/dashboard/project/YOUR_PROJECT_REF
+
+[functions]
+# Edge Functions configuration
+[functions.create-payment-intent]
+# No special configuration needed - uses default settings
+

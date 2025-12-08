@@ -35,6 +35,19 @@ class AccountManager {
         }
     }
 
+    async getRole() {
+        const account = await this.getAccount();
+        return account?.role || 'customer';
+    }
+
+    isStaff() {
+        return this.account?.role === 'staff';
+    }
+
+    isCustomer() {
+        return this.account?.role === 'customer';
+    }
+
     async getBalance() {
         const account = await this.getAccount();
         return account ? parseFloat(account.balance) : 0;

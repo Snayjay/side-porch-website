@@ -37,7 +37,7 @@ serve(async (req) => {
   }
 
   try {
-    const { amount, accountId } = await req.json()
+    const { amount, accountId, currency, description, receiptEmail } = await req.json()
 
     // Validate input
     if (!amount || amount <= 0) {
@@ -47,12 +47,27 @@ serve(async (req) => {
       )
     }
 
+    if (!accountId) {
+      return new Response(
+        JSON.stringify({ error: "Account ID is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
     // Create PaymentIntent with Stripe
+    // Required fields: amount, currency
+    // Recommended fields: description, receipt_email, statement_descriptor, metadata
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: "usd",
+      amount: Math.round(amount * 100), // Convert to cents (Stripe requires integer amounts)
+      currency: currency || "usd", // Required: ISO currency code
+      payment_method_types: ["card"], // Explicitly specify payment method types
+      description: description || `Coffee Club account funding: $${amount.toFixed(2)}`,
+      receipt_email: receiptEmail || undefined, // Email for receipt (optional but recommended)
+      statement_descriptor: "SIDE PORCH COFFEE", // What appears on customer's credit card statement (max 22 chars)
       metadata: {
         account_id: accountId,
+        funding_amount: amount.toString(),
+        type: "account_funding"
       },
     })
 

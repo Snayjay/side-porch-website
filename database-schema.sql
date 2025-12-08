@@ -110,12 +110,14 @@ EXECUTE FUNCTION update_account_balance();
 CREATE OR REPLACE FUNCTION create_coffee_club_account()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO coffee_club_accounts (id, email, full_name)
+    INSERT INTO coffee_club_accounts (id, email, full_name, role)
     VALUES (
         NEW.id,
         NEW.email,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email)
-    );
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+        'customer'  -- Default role for new users
+    )
+    ON CONFLICT (id) DO NOTHING;  -- Prevent errors if account already exists
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
