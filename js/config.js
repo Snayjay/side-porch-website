@@ -15,8 +15,12 @@ class ConfigManager {
         };
         this.loaded = false;
         
-        // Priority 1: Load from config.local.js (window.COFFEE_CLUB_CONFIG) if available
+        // Priority 1: Load from config.local.js (window.COFFEE_CLUB_CONFIG) if available (local dev, gitignored)
         this.loadFromLocalConfig();
+        
+        // Priority 1b: Load from config.public.js (public config file, committed to repo)
+        // This allows GitHub Pages to work without config.local.js
+        this.loadFromPublicConfig();
         
         // Priority 2: Load from localStorage (for browser-based setup)
         this.loadFromStorage();
@@ -73,6 +77,42 @@ class ConfigManager {
             }
             // Always notify that config is loaded (even if Supabase isn't configured)
             this.notifyConfigLoaded();
+        }
+    }
+    
+    loadFromPublicConfig() {
+        // This is called after loadFromLocalConfig
+        // Only load from public config if we don't already have config from local
+        if (!this.loaded && typeof window !== 'undefined' && window.COFFEE_CLUB_CONFIG) {
+            const publicConfig = window.COFFEE_CLUB_CONFIG;
+            // Only use public config if we don't have config yet
+            if (publicConfig.supabase?.url && publicConfig.supabase?.anonKey) {
+                // Check if anonKey is not a placeholder
+                if (publicConfig.supabase.anonKey !== 'YOUR_SUPABASE_ANON_KEY_HERE' && 
+                    publicConfig.supabase.anonKey !== '') {
+                    this.config.supabase.url = publicConfig.supabase.url;
+                    this.config.supabase.anonKey = publicConfig.supabase.anonKey;
+                    this.loaded = true;
+                }
+            }
+            if (publicConfig.stripe?.publishableKey && 
+                publicConfig.stripe.publishableKey !== 'YOUR_STRIPE_PUBLISHABLE_KEY_HERE') {
+                this.config.stripe.publishableKey = publicConfig.stripe.publishableKey;
+            }
+            // Save to localStorage as backup
+            if (this.loaded) {
+                this.saveToStorage();
+                
+                // If Supabase is configured, initialize it immediately
+                if (this.isSupabaseConfigured() && typeof initializeSupabase === 'function') {
+                    // Wait a tick to ensure supabase-client.js is loaded
+                    setTimeout(() => {
+                        initializeSupabase();
+                    }, 0);
+                }
+                // Always notify that config is loaded
+                this.notifyConfigLoaded();
+            }
         }
     }
     
