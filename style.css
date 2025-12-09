@@ -517,6 +517,12 @@ footer .footer-link:hover {
     transition: fill 0.3s ease;
 }
 
+.social-links a img {
+    width: 24px;
+    height: 24px;
+    transition: opacity 0.3s ease;
+}
+
 .social-links a:hover {
     transform: scale(1.2);
 }
@@ -525,8 +531,17 @@ footer .footer-link:hover {
     fill: var(--accent-orange);
 }
 
+.social-links a:hover img {
+    opacity: 0.7;
+}
+
 /* Larger icons for contact page */
 #contact-social-links a svg {
+    width: 64px;
+    height: 64px;
+}
+
+#contact-social-links a img {
     width: 64px;
     height: 64px;
 }
