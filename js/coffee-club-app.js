@@ -436,7 +436,6 @@ class CoffeeClubApp {
         document.getElementById('welcome-section').style.display = 'none';
         document.getElementById('account-section').style.display = 'none';
         document.getElementById('funding-section').style.display = 'none';
-        document.getElementById('transaction-history-section').style.display = 'none';
         document.getElementById('order-history-section').style.display = 'none';
         if (menuCartSection) menuCartSection.style.display = 'none'; // Hide menu and cart
         
@@ -615,17 +614,25 @@ class CoffeeClubApp {
     async autoLogout(message) {
         this.clearInactivityTimer();
         
-        // Show message to user
-        if (message) {
-            errorDialog.show(message, 'Session Expired', 'error', 8000);
-        }
-        
-        // Sign out
+        // Sign out first
         const result = await authManager.signOut();
         if (result.success) {
             this.handleAuthStateChange(null);
             coffeeClubMenu.clearCart();
             localStorage.removeItem('coffeeClubLastActivity');
+            
+            // Show message to user, then redirect to login
+            if (message) {
+                errorDialog.show(message, 'Session Expired', 'error', 0, () => {
+                    // Callback when OK is clicked - redirect to login
+                    const returnUrl = encodeURIComponent(window.location.href);
+                    window.location.href = `login.html?return=${returnUrl}`;
+                });
+            } else {
+                // If no message, redirect immediately
+                const returnUrl = encodeURIComponent(window.location.href);
+                window.location.href = `login.html?return=${returnUrl}`;
+            }
         }
     }
 
@@ -652,12 +659,19 @@ class CoffeeClubApp {
                 document.getElementById('welcome-section').style.display = 'none';
                 document.getElementById('account-section').style.display = 'none';
             document.getElementById('funding-section').style.display = 'none';
-            document.getElementById('transaction-history-section').style.display = 'none';
             document.getElementById('order-history-section').style.display = 'none';
                 if (menuCartSection) menuCartSection.style.display = 'none';
                 
                 this.showEmailVerificationMessage(user.email);
                 return;
+            }
+            
+            // Ensure menu is loaded when showing authenticated sections
+            if (typeof coffeeClubMenu !== 'undefined' && !coffeeClubMenu.productsLoaded) {
+                const client = getSupabaseClient();
+                if (client) {
+                    coffeeClubMenu.loadProducts();
+                }
             }
             
             // User is authenticated and verified
@@ -670,12 +684,17 @@ class CoffeeClubApp {
                 // Ensure accordion starts collapsed
                 fundingSection.classList.remove('expanded');
             }
-            const transactionHistorySection = document.getElementById('transaction-history-section');
-            if (transactionHistorySection) {
-                transactionHistorySection.style.display = 'block';
-            }
+            // Transaction history is now inside the funding accordion, so no separate section to show
             document.getElementById('order-history-section').style.display = 'block';
             if (menuCartSection) menuCartSection.style.display = 'grid'; // Show menu and cart
+
+            // Ensure menu is loaded when showing authenticated sections
+            if (typeof coffeeClubMenu !== 'undefined') {
+                const client = getSupabaseClient();
+                if (client && (!coffeeClubMenu.productsLoaded || coffeeClubMenu.products.length === 0)) {
+                    await coffeeClubMenu.loadProducts();
+                }
+            }
 
             // Reset activity timer and start monitoring
             this.lastActivityTime = Date.now();
@@ -695,7 +714,6 @@ class CoffeeClubApp {
             document.getElementById('welcome-section').style.display = 'none';
             document.getElementById('account-section').style.display = 'none';
             document.getElementById('funding-section').style.display = 'none';
-            document.getElementById('transaction-history-section').style.display = 'none';
             document.getElementById('order-history-section').style.display = 'none';
             if (menuCartSection) menuCartSection.style.display = 'none'; // Hide menu and cart
 
@@ -707,6 +725,12 @@ class CoffeeClubApp {
     async updateAdminLinkVisibility() {
         // Update admin link visibility in navigation
         const adminLinks = document.querySelectorAll('.admin-nav-link');
+        
+        // Clear role cache to ensure we get the latest role from database
+        if (adminManager.clearRoleCache) {
+            adminManager.clearRoleCache();
+        }
+        
         const isStaff = await adminManager.isStaff();
         
         adminLinks.forEach(link => {

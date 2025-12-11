@@ -67,14 +67,14 @@
                     <div id="funding-container">
                         <!-- Funding content will be rendered here -->
                     </div>
-                </div>
-            </div>
-
-            <!-- Transaction History Section -->
-            <div id="transaction-history-section" class="content-card" style="display: none; margin-bottom: 2rem;">
-                <h2>Transaction History</h2>
-                <div id="transaction-history-container">
-                    <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading transactions...</p>
+                    
+                    <!-- Transaction History (merged into funding accordion) -->
+                    <div style="margin-top: 3rem; padding-top: 2rem; border-top: 2px solid rgba(139, 111, 71, 0.2);">
+                        <h3 style="color: var(--deep-brown); margin-bottom: 1rem;">Transaction History</h3>
+                        <div id="transaction-history-container">
+                            <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading transactions...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -133,6 +133,7 @@
     <script src="js/dev-manager.js"></script>
     <script src="js/nav-active.js"></script>
     <script src="js/nav-login-logout.js"></script>
+    <script src="js/nav-admin-link.js"></script>
     <script>
         // Check module access and redirect if disabled
         window.addEventListener('supabaseReady', async () => {

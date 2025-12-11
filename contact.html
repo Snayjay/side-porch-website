@@ -146,6 +146,7 @@
     <script src="js/dev-manager.js"></script>
     <script src="js/nav-active.js"></script>
     <script src="js/nav-login-logout.js"></script>
+    <script src="js/nav-admin-link.js"></script>
     <script>
         // Check module access and redirect if disabled
         // Load social links for contact page
@@ -173,8 +174,21 @@
                             link.style.justifyContent = 'center';
                             
                             // Get icon SVG
-                            const iconSvg = adminManager.getSocialIcon(platform.platform);
-                            link.innerHTML = iconSvg.replace('width="24" height="24"', 'width="64" height="64"');
+                            const iconSvg = adminManager.getSocialIcon(platform.platform, platform.url);
+                            // Replace width/height for larger display on contact page
+                            // Handle different viewBox sizes (24x24, 16x16, 256x256)
+                            let sizedSvg = iconSvg;
+                            if (iconSvg.includes('width="24"')) {
+                                sizedSvg = iconSvg.replace('width="24" height="24"', 'width="64" height="64"');
+                            } else if (iconSvg.includes('width="16"')) {
+                                sizedSvg = iconSvg.replace('width="16" height="16"', 'width="64" height="64"');
+                            } else if (iconSvg.includes('width="256"')) {
+                                sizedSvg = iconSvg.replace('width="256" height="256"', 'width="64" height="64"');
+                            } else {
+                                // Fallback: add width/height if not present
+                                sizedSvg = iconSvg.replace(/<svg/, '<svg width="64" height="64"');
+                            }
+                            link.innerHTML = sizedSvg;
                             container.appendChild(link);
                         });
                     } else {

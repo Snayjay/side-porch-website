@@ -5,9 +5,10 @@ class ErrorDialog {
     constructor() {
         this.dialog = null;
         this.isOpen = false;
+        this.onCloseCallback = null;
     }
 
-    show(message, title = 'Error', allowHtml = false) {
+    show(message, title = 'Error', allowHtml = false, autoCloseDelay = 0, onClose = null) {
         if (this.isOpen) {
             this.close();
         }
@@ -54,7 +55,7 @@ class ErrorDialog {
                         <span style="font-size: 1.5rem;">⚠️</span>
                         <span>${title}</span>
                     </h3>
-                    <button class="error-dialog-close" style="background: none; border: none; font-size: 2rem; color: var(--text-dark); cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease;" onclick="errorDialog.close()">&times;</button>
+                    <button class="error-dialog-close" style="background: none; border: none; font-size: 2rem; color: var(--text-dark); cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease;">&times;</button>
                 </div>
             </div>
             <div style="padding: 1.5rem;">
@@ -63,25 +64,49 @@ class ErrorDialog {
                 </div>
             </div>
             <div style="padding: 1rem 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2); display: flex; justify-content: flex-end;">
-                <button class="btn" onclick="errorDialog.close()" style="min-width: 100px;">OK</button>
+                <button class="btn" id="error-dialog-ok-btn" style="min-width: 100px;">OK</button>
             </div>
         `;
 
         overlay.appendChild(dialog);
         document.body.appendChild(overlay);
         this.dialog = overlay;
+        this.onCloseCallback = onClose || null;
+
+        // Set up close button
+        const closeButton = dialog.querySelector('.error-dialog-close');
+        if (closeButton) {
+            closeButton.addEventListener('click', () => {
+                this.close(false);
+            });
+        }
+
+        // Set up OK button
+        const okButton = dialog.querySelector('#error-dialog-ok-btn');
+        if (okButton) {
+            okButton.addEventListener('click', () => {
+                this.close(!!onClose);
+            });
+        }
+
+        // Auto-close if delay is set
+        if (autoCloseDelay > 0) {
+            setTimeout(() => {
+                this.close(!!onClose);
+            }, autoCloseDelay);
+        }
 
         // Close on overlay click
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
-                this.close();
+                this.close(false);
             }
         });
 
         // Close on Escape key
         const escapeHandler = (e) => {
             if (e.key === 'Escape') {
-                this.close();
+                this.close(false);
                 document.removeEventListener('keydown', escapeHandler);
             }
         };
@@ -89,7 +114,6 @@ class ErrorDialog {
 
         // Focus the OK button
         setTimeout(() => {
-            const okButton = dialog.querySelector('.btn');
             if (okButton) okButton.focus();
         }, 100);
     }
@@ -137,7 +161,7 @@ class ErrorDialog {
                         <span style="font-size: 1.5rem;">✓</span>
                         <span>${title}</span>
                     </h3>
-                    <button class="error-dialog-close" style="background: none; border: none; font-size: 2rem; color: var(--text-dark); cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease;" onclick="errorDialog.close()">&times;</button>
+                    <button class="error-dialog-close" style="background: none; border: none; font-size: 2rem; color: var(--text-dark); cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease;" onclick="errorDialog.close(false)">&times;</button>
                 </div>
             </div>
             <div style="padding: 1.5rem;">
@@ -146,7 +170,7 @@ class ErrorDialog {
                 </p>
             </div>
             <div style="padding: 1rem 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2); display: flex; justify-content: flex-end;">
-                <button class="btn" onclick="errorDialog.close()" style="min-width: 100px;">OK</button>
+                <button class="btn" onclick="errorDialog.close(false)" style="min-width: 100px;">OK</button>
             </div>
         `;
 
@@ -183,11 +207,18 @@ class ErrorDialog {
         return div.innerHTML;
     }
 
-    close() {
+    close(triggerCallback = false) {
         if (this.dialog) {
+            const overlay = this.dialog;
             this.dialog.remove();
             this.dialog = null;
             this.isOpen = false;
+            
+            // Trigger callback if provided and requested
+            if (triggerCallback && this.onCloseCallback) {
+                this.onCloseCallback();
+                this.onCloseCallback = null;
+            }
         }
     }
 }

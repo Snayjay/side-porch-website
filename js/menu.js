@@ -19,8 +19,8 @@ class MenuDisplay {
                 .from('menu_categories')
                 .select('*')
                 .eq('available', true)
-                .order('type', { ascending: true })
                 .order('display_order', { ascending: true })
+                .order('type', { ascending: true })
                 .order('name', { ascending: true });
 
             if (type) {
@@ -72,15 +72,34 @@ class MenuDisplay {
         return `$${parseFloat(price).toFixed(2)}`;
     }
 
-    // Get emoji for category type
-    getCategoryEmoji(type) {
-        const emojis = {
+    // Get emoji for category (by name or type)
+    getCategoryEmoji(category) {
+        // Check category name first for specific icons
+        const categoryName = typeof category === 'string' ? category : (category?.name || '');
+        const categoryType = typeof category === 'string' ? null : (category?.type || '');
+        
+        // Specific category name mappings
+        const nameEmojis = {
+            'Seasonal Specials': '🎄☕',  // Tall festive looking mug
+            'Sans Coffee': '☕',          // Med coffee mug
+            'Tea': '🍵',                 // Glass of tea
+            'Espresso': '🥃'             // Shot glass of espresso
+        };
+        
+        // Check if we have a specific emoji for this category name
+        if (categoryName && nameEmojis[categoryName]) {
+            return nameEmojis[categoryName];
+        }
+        
+        // Fall back to type-based emojis
+        const typeEmojis = {
             'drink': '☕',
             'food': '🥐',
             'merch': '🛍️',
             'ingredient': '✨'
         };
-        return emojis[type] || '📋';
+        
+        return typeEmojis[categoryType] || '📋';
     }
 
     // Render menu items
@@ -100,50 +119,36 @@ class MenuDisplay {
             }
         });
 
-        // Group categories by type
-        const categoriesByType = {
-            'drink': [],
-            'food': [],
-            'merch': []
-        };
-
-        this.categories.forEach(category => {
-            if (categoriesByType[category.type]) {
-                categoriesByType[category.type].push(category);
+        // Sort all categories by display_order (primary), then by type, then by name
+        const sortedCategories = [...this.categories].sort((a, b) => {
+            const orderA = parseInt(a.display_order || 999999);
+            const orderB = parseInt(b.display_order || 999999);
+            
+            // Primary sort: display_order
+            if (orderA !== orderB) {
+                return orderA - orderB;
             }
+            
+            // Secondary sort: type (if display_order is the same)
+            const typeA = a.type || '';
+            const typeB = b.type || '';
+            if (typeA !== typeB) {
+                return typeA.localeCompare(typeB);
+            }
+            
+            // Tertiary sort: name (if display_order and type are the same)
+            return (a.name || '').localeCompare(b.name || '');
         });
 
         let html = '';
 
-        // Render drinks
-        if (categoriesByType.drink.length > 0) {
-            categoriesByType.drink.forEach(category => {
-                const categoryProducts = productsByCategory[category.id] || [];
-                if (categoryProducts.length > 0) {
-                    html += this.renderCategorySection(category, categoryProducts);
-                }
-            });
-        }
-
-        // Render food
-        if (categoriesByType.food.length > 0) {
-            categoriesByType.food.forEach(category => {
-                const categoryProducts = productsByCategory[category.id] || [];
-                if (categoryProducts.length > 0) {
-                    html += this.renderCategorySection(category, categoryProducts);
-                }
-            });
-        }
-
-        // Render merch
-        if (categoriesByType.merch.length > 0) {
-            categoriesByType.merch.forEach(category => {
-                const categoryProducts = productsByCategory[category.id] || [];
-                if (categoryProducts.length > 0) {
-                    html += this.renderCategorySection(category, categoryProducts);
-                }
-            });
-        }
+        // Render categories in display_order (regardless of type)
+        sortedCategories.forEach(category => {
+            const categoryProducts = productsByCategory[category.id] || [];
+            if (categoryProducts.length > 0) {
+                html += this.renderCategorySection(category, categoryProducts);
+            }
+        });
 
         if (!html) {
             html = '<p style="text-align: center; color: var(--text-dark); opacity: 0.7; padding: 3rem;">No menu items available at this time. Please check back soon!</p>';
@@ -154,7 +159,7 @@ class MenuDisplay {
 
     // Render a category section
     renderCategorySection(category, products) {
-        const emoji = this.getCategoryEmoji(category.type);
+        const emoji = this.getCategoryEmoji(category);
         let html = `
             <div class="menu-category">
                 <h2>${emoji} ${category.name}</h2>

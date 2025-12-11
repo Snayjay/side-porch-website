@@ -11,6 +11,9 @@ class ConfigManager {
             },
             stripe: {
                 publishableKey: null
+            },
+            openai: {
+                apiKey: null
             }
         };
         this.loaded = false;
@@ -65,6 +68,9 @@ class ConfigManager {
             if (localConfig.stripe?.publishableKey) {
                 this.config.stripe.publishableKey = localConfig.stripe.publishableKey;
             }
+            if (localConfig.openai?.apiKey) {
+                this.config.openai.apiKey = localConfig.openai.apiKey;
+            }
             // Save to localStorage as backup
             this.saveToStorage();
             
@@ -98,6 +104,10 @@ class ConfigManager {
             if (publicConfig.stripe?.publishableKey && 
                 publicConfig.stripe.publishableKey !== 'YOUR_STRIPE_PUBLISHABLE_KEY_HERE') {
                 this.config.stripe.publishableKey = publicConfig.stripe.publishableKey;
+            }
+            if (publicConfig.openai?.apiKey && 
+                publicConfig.openai.apiKey !== 'YOUR_OPENAI_API_KEY_HERE') {
+                this.config.openai.apiKey = publicConfig.openai.apiKey;
             }
             // Save to localStorage as backup
             if (this.loaded) {

@@ -17,8 +17,10 @@ class AdminManager {
         return role === 'customer';
     }
 
-    async getUserRole() {
-        if (this.userRole) {
+    async getUserRole(forceRefresh = false) {
+        // If we have a cached role and not forcing refresh, return it
+        // But always refresh if user might have changed (e.g., after login)
+        if (this.userRole && !forceRefresh) {
             return this.userRole;
         }
 
@@ -31,6 +33,7 @@ class AdminManager {
         const user = await authManager.getCurrentUser();
         if (!user) {
             console.warn('No authenticated user found');
+            this.userRole = null; // Clear cache if no user
             return null;
         }
 
@@ -59,6 +62,11 @@ class AdminManager {
             this.userRole = 'customer';
             return this.userRole;
         }
+    }
+
+    // Clear cached role (useful when role might have changed)
+    clearRoleCache() {
+        this.userRole = null;
     }
 
     // User role management
@@ -355,25 +363,138 @@ class AdminManager {
             throw new Error('Supabase not configured');
         }
 
-        if (!(await this.isStaff())) {
-            throw new Error('Unauthorized: Staff access required');
+        // Verify user is authenticated
+        const user = await authManager.getCurrentUser();
+        if (!user) {
+            throw new Error('User not authenticated');
         }
 
+        console.log('=== PRODUCT CREATE DEBUG ===');
+        console.log('Auth User ID (auth.uid()):', user.id);
+        console.log('Auth User Email:', user.email);
+        
+        // Check account by ID first (what RLS policy checks)
+        const { data: accountById, error: idError } = await client
+            .from('coffee_club_accounts')
+            .select('id, role, email')
+            .eq('id', user.id)
+            .maybeSingle();
+        
+        console.log('Account found by ID:', accountById);
+        console.log('Error finding by ID:', idError);
+        
+        // Also check by email to see if account exists with different ID
+        const { data: accountByEmail, error: emailError } = await client
+            .from('coffee_club_accounts')
+            .select('id, role, email')
+            .eq('email', user.email)
+            .maybeSingle();
+        
+        console.log('Account found by email:', accountByEmail);
+        console.log('Error finding by email:', emailError);
+        
+        // Determine the issue
+        if (!accountById && accountByEmail) {
+            // Account exists but ID doesn't match - this is the RLS problem
+            const errorMsg = `RLS Policy Failure: Your account ID in coffee_club_accounts (${accountByEmail.id}) does not match your auth.uid() (${user.id}). The RLS policy requires these to match exactly.\n\nTo fix: Update the 'id' column in coffee_club_accounts table for your account (${user.email}) to match: ${user.id}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        if (!accountById && !accountByEmail) {
+            throw new Error(`Account not found: No account found in coffee_club_accounts for user ${user.email}. Please ensure your account exists.`);
+        }
+        
+        const account = accountById || accountByEmail;
+        
+        // Verify staff role
+        if (account.role !== 'staff') {
+            throw new Error(`Unauthorized: Your role is '${account.role}', but 'staff' role is required. Please contact an administrator to update your role.`);
+        }
+        
+        console.log('✓ User authenticated');
+        console.log('✓ Account ID matches auth.uid():', account.id === user.id);
+        console.log('✓ Role verified: staff');
+        
+        // Verify Supabase session is active
+        const { data: sessionData, error: sessionError } = await client.auth.getSession();
+        console.log('Current session:', sessionData?.session ? 'Active' : 'None');
+        console.log('Session user ID:', sessionData?.session?.user?.id);
+        console.log('Session error:', sessionError);
+        
+        if (!sessionData?.session) {
+            throw new Error('No active session. Please log out and log back in.');
+        }
+        
+        if (sessionData.session.user.id !== user.id) {
+            console.warn('Session user ID mismatch:', sessionData.session.user.id, 'vs', user.id);
+        }
+        
+        // Test if RLS can see the user's role by querying coffee_club_accounts
+        // This simulates what the RLS policy does
+        const { data: rlsTest, error: rlsTestError } = await client
+            .from('coffee_club_accounts')
+            .select('id, role')
+            .eq('id', user.id)
+            .eq('role', 'staff')
+            .maybeSingle();
+        
+        console.log('RLS Test Query Result:', rlsTest);
+        console.log('RLS Test Error:', rlsTestError);
+        
+        if (!rlsTest) {
+            console.error('RLS Policy Test Failed: Cannot find account with matching ID and staff role');
+            throw new Error('RLS Policy Test Failed: The database cannot verify your staff role. This may be a session or RLS policy issue. Try logging out and back in.');
+        }
+        
+        console.log('=== END DEBUG ===');
+
         try {
+            // Get category type from category_id
+            let categoryType = productData.category || null;
+            if (!categoryType && productData.category_id) {
+                const categoryResult = await this.getAllCategories(null, true);
+                const category = categoryResult.categories?.find(c => c.id === productData.category_id);
+                if (category) {
+                    categoryType = category.type;
+                }
+            }
+            
+            // If still no category type, default based on context or throw error
+            if (!categoryType) {
+                throw new Error('Category type is required. Please select a valid category.');
+            }
+
             const insertData = {
                 name: productData.name,
                 description: productData.description || null,
+                category: categoryType, // Required NOT NULL field
                 category_id: productData.category_id || null,
                 price: parseFloat(productData.price),
                 tax_rate: parseFloat(productData.tax_rate || 0.0825),
                 image_url: productData.image_url || null,
-                menu_section: productData.menu_section || null,
+                temp: productData.temp || null, // Temperature for drinks (hot, cold, both)
                 available: productData.available !== undefined ? productData.available : true
             };
 
-            // Keep category field for backward compatibility if provided
-            if (productData.category) {
-                insertData.category = productData.category;
+            console.log('Inserting product with data:', insertData);
+            
+            // Ensure session is active and refresh if needed
+            const { data: { session }, error: sessionRefreshError } = await client.auth.getSession();
+            console.log('Session before insert:', session ? 'Active' : 'None');
+            console.log('Session user ID:', session?.user?.id);
+            
+            if (!session) {
+                throw new Error('No active session. Please log out and log back in.');
+            }
+            
+            // Refresh session to ensure it's current
+            try {
+                await client.auth.refreshSession();
+                console.log('Session refreshed');
+            } catch (refreshError) {
+                console.warn('Session refresh warning:', refreshError);
+                // Continue anyway - session might still be valid
             }
 
             const { data, error } = await client
@@ -382,7 +503,29 @@ class AdminManager {
                 .select()
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error('Database insert error:', error);
+                console.error('Error code:', error.code);
+                console.error('Error details:', error.details);
+                console.error('Error hint:', error.hint);
+                
+                // Provide more helpful error message for RLS violations
+                if (error.message && error.message.includes('row-level security')) {
+                    // Check if it's actually an ID mismatch issue
+                    const { data: accountCheck } = await client
+                        .from('coffee_club_accounts')
+                        .select('id, role')
+                        .eq('email', user.email)
+                        .maybeSingle();
+                    
+                    if (accountCheck && accountCheck.id !== user.id) {
+                        throw new Error(`RLS Policy Error: Account ID mismatch. Your account ID (${accountCheck.id}) does not match auth.uid() (${user.id}). Update the id column in coffee_club_accounts to match: ${user.id}`);
+                    }
+                    
+                    throw new Error(`RLS Policy Error: The database cannot verify your staff permissions. This may be due to:\n1. Your account ID doesn't match auth.uid()\n2. The RLS policy needs to be refreshed\n3. Session authentication issue\n\nTry logging out and back in, or run the fix-rls-policy.sql script in your Supabase SQL editor.`);
+                }
+                throw error;
+            }
             return { success: true, product: data };
         } catch (error) {
             console.error('Create product error:', error);
@@ -396,33 +539,110 @@ class AdminManager {
             throw new Error('Supabase not configured');
         }
 
+        // Verify user is authenticated
+        const user = await authManager.getCurrentUser();
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
+
+        console.log('=== PRODUCT UPDATE DEBUG ===');
+        console.log('Product ID:', productId);
+        console.log('Auth User ID (auth.uid()):', user.id);
+        console.log('Auth User Email:', user.email);
+
         if (!(await this.isStaff())) {
             throw new Error('Unauthorized: Staff access required');
         }
 
         try {
+            // Refresh session to ensure it's current
+            try {
+                await client.auth.refreshSession();
+                console.log('Session refreshed for product update');
+            } catch (refreshError) {
+                console.warn('Session refresh warning:', refreshError);
+            }
+
+            // Verify session is active
+            const { data: { session }, error: sessionError } = await client.auth.getSession();
+            if (!session) {
+                throw new Error('No active session. Please log out and log back in.');
+            }
+            console.log('Session verified for product update');
+
+            // First, verify the product exists and we can read it
+            const { data: existingProduct, error: readError } = await client
+                .from('products')
+                .select('id, name, category')
+                .eq('id', productId)
+                .maybeSingle();
+            
+            console.log('Existing product:', existingProduct);
+            console.log('Read error:', readError);
+            
+            if (readError) {
+                console.error('Error reading product:', readError);
+                throw new Error(`Cannot read product: ${readError.message}`);
+            }
+            
+            if (!existingProduct) {
+                throw new Error(`Product with ID ${productId} not found`);
+            }
+
             const updateData = {
                 updated_at: new Date().toISOString()
             };
 
             if (productData.name !== undefined) updateData.name = productData.name;
             if (productData.description !== undefined) updateData.description = productData.description;
-            if (productData.category_id !== undefined) updateData.category_id = productData.category_id;
-            if (productData.category !== undefined) updateData.category = productData.category; // Backward compatibility
+            if (productData.category_id !== undefined) {
+                updateData.category_id = productData.category_id;
+                // Also update category field if category_id changed
+                if (productData.category_id) {
+                    const categoryResult = await this.getAllCategories(null, true);
+                    const category = categoryResult.categories?.find(c => c.id === productData.category_id);
+                    if (category) {
+                        updateData.category = category.type;
+                    }
+                }
+            }
+            if (productData.category !== undefined) updateData.category = productData.category; // Explicit category override
             if (productData.price !== undefined) updateData.price = parseFloat(productData.price);
             if (productData.tax_rate !== undefined) updateData.tax_rate = parseFloat(productData.tax_rate);
             if (productData.image_url !== undefined) updateData.image_url = productData.image_url;
-            if (productData.menu_section !== undefined) updateData.menu_section = productData.menu_section;
+            if (productData.temp !== undefined) updateData.temp = productData.temp || null; // Temperature for drinks
             if (productData.available !== undefined) updateData.available = productData.available;
+
+            console.log('Update data:', updateData);
+            console.log('Current session user:', session?.user?.id);
 
             const { data, error } = await client
                 .from('products')
                 .update(updateData)
                 .eq('id', productId)
                 .select()
-                .single();
+                .maybeSingle();
 
-            if (error) throw error;
+            console.log('Update result - data:', data);
+            console.log('Update result - error:', error);
+            console.log('=== END UPDATE DEBUG ===');
+
+            if (error) {
+                console.error('Database update error:', error);
+                console.error('Error code:', error.code);
+                console.error('Error details:', error.details);
+                console.error('Error hint:', error.hint);
+                
+                // Provide more helpful error message for RLS violations
+                if (error.message && error.message.includes('row-level security')) {
+                    throw new Error(`RLS Policy Error: Cannot update product. The database cannot verify your staff permissions. This may be due to:\n1. Your account ID doesn't match auth.uid()\n2. The RLS policy needs to be refreshed\n3. Session authentication issue\n\nTry logging out and back in, or run the fix-rls-policy.sql script in your Supabase SQL editor.`);
+                }
+                throw error;
+            }
+            
+            if (!data) {
+                throw new Error('Product update completed but no data returned. This may indicate an RLS policy issue.');
+            }
             return { success: true, product: data };
         } catch (error) {
             console.error('Update product error:', error);
@@ -524,7 +744,15 @@ class AdminManager {
             return { success: true, ingredient: data };
         } catch (error) {
             console.error('Create ingredient error:', error);
-            return { success: false, error: error.message };
+            
+            // Convert database errors to user-friendly messages
+            let errorMessage = error.message;
+            
+            if (error.code === '23505' || error.message.includes('duplicate key') || error.message.includes('ingredients_name_category_key')) {
+                errorMessage = `An ingredient with the name "${ingredientData.name}" already exists in the "${ingredientData.category}" category. Please use a different name or category.`;
+            }
+            
+            return { success: false, error: errorMessage };
         }
     }
 
@@ -560,7 +788,15 @@ class AdminManager {
             return { success: true, ingredient: data };
         } catch (error) {
             console.error('Update ingredient error:', error);
-            return { success: false, error: error.message };
+            
+            // Convert database errors to user-friendly messages
+            let errorMessage = error.message;
+            
+            if (error.code === '23505' || error.message.includes('duplicate key') || error.message.includes('ingredients_name_category_key')) {
+                errorMessage = `An ingredient with the name "${ingredientData.name}" already exists in the "${ingredientData.category}" category. Please use a different name or category.`;
+            }
+            
+            return { success: false, error: errorMessage };
         }
     }
 
@@ -676,40 +912,186 @@ class AdminManager {
             throw new Error('Supabase not configured');
         }
 
+        // Verify user is authenticated
+        const user = await authManager.getCurrentUser();
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
+
+        console.log('=== DRINK INGREDIENTS INSERT DEBUG ===');
+        console.log('Auth User ID (auth.uid()):', user.id);
+        console.log('Auth User Email:', user.email);
+        
+        // Check account by ID first (what RLS policy checks)
+        const { data: accountById, error: idError } = await client
+            .from('coffee_club_accounts')
+            .select('id, role, email')
+            .eq('id', user.id)
+            .maybeSingle();
+        
+        console.log('Account found by ID:', accountById);
+        console.log('Error finding by ID:', idError);
+        
+        const account = accountById;
+        
+        if (!account) {
+            throw new Error(`Account not found: No account found in coffee_club_accounts for user ${user.email}. Please ensure your account exists.`);
+        }
+        
+        // Verify staff role
+        if (account.role !== 'staff') {
+            throw new Error(`Unauthorized: Your role is '${account.role}', but 'staff' role is required.`);
+        }
+        
+        console.log('✓ User authenticated');
+        console.log('✓ Account ID matches auth.uid():', account.id === user.id);
+        console.log('✓ Role verified: staff');
+        console.log('=== END DEBUG ===');
+
         if (!(await this.isStaff())) {
             throw new Error('Unauthorized: Staff access required');
         }
 
         try {
-            // Delete existing drink ingredients
-            const { error: deleteError } = await client
+            // Refresh session to ensure it's current
+            try {
+                await client.auth.refreshSession();
+                console.log('Session refreshed for drink ingredients insert');
+            } catch (refreshError) {
+                console.warn('Session refresh warning:', refreshError);
+                // Continue anyway - session might still be valid
+            }
+
+            // Verify session is active
+            const { data: { session }, error: sessionError } = await client.auth.getSession();
+            if (!session) {
+                throw new Error('No active session. Please log out and log back in.');
+            }
+            console.log('Session verified for drink ingredients update');
+
+            // Get existing ingredients to determine what to update vs insert vs delete
+            const { data: existingIngredients, error: fetchError } = await client
                 .from('drink_ingredients')
-                .delete()
+                .select('ingredient_id, default_amount, is_required, is_removable, is_addable')
                 .eq('product_id', productId);
 
-            if (deleteError) throw deleteError;
+            if (fetchError) {
+                console.error('Error fetching existing ingredients:', fetchError);
+                throw fetchError;
+            }
 
-            // Insert new drink ingredients
-            if (ingredients && ingredients.length > 0) {
-                const drinkIngredients = ingredients.map(ing => ({
+            const existingIngredientMap = new Map();
+            existingIngredients?.forEach(ei => {
+                existingIngredientMap.set(ei.ingredient_id, ei);
+            });
+
+            // Remove duplicates from input - keep only the first occurrence of each ingredient_id
+            const seenIngredientIds = new Set();
+            const uniqueIngredients = ingredients?.filter(ing => {
+                if (seenIngredientIds.has(ing.ingredient_id)) {
+                    console.warn(`Duplicate ingredient_id ${ing.ingredient_id} removed`);
+                    return false;
+                }
+                seenIngredientIds.add(ing.ingredient_id);
+                return true;
+            }) || [];
+
+            const newIngredientIds = new Set(uniqueIngredients.map(ing => ing.ingredient_id));
+            const existingIngredientIds = new Set(existingIngredientMap.keys());
+
+            // Delete ingredients that are no longer in the recipe
+            const ingredientsToDelete = Array.from(existingIngredientIds).filter(id => !newIngredientIds.has(id));
+            if (ingredientsToDelete.length > 0) {
+                const { error: deleteError } = await client
+                    .from('drink_ingredients')
+                    .delete()
+                    .eq('product_id', productId)
+                    .in('ingredient_id', ingredientsToDelete);
+
+                if (deleteError) {
+                    console.error('Delete drink ingredients error:', deleteError);
+                    throw deleteError;
+                }
+            }
+
+            // Process each ingredient: update if exists, insert if new
+            const updates = [];
+            const inserts = [];
+
+            for (const ing of uniqueIngredients) {
+                const ingredientData = {
                     product_id: productId,
                     ingredient_id: ing.ingredient_id,
                     default_amount: parseFloat(ing.default_amount || 0),
                     is_required: ing.is_required || false,
                     is_removable: ing.is_removable !== undefined ? ing.is_removable : true,
                     is_addable: ing.is_addable !== undefined ? ing.is_addable : true
-                }));
+                };
 
-                const { data, error: insertError } = await client
-                    .from('drink_ingredients')
-                    .insert(drinkIngredients)
-                    .select();
-
-                if (insertError) throw insertError;
-                return { success: true, drinkIngredients: data };
+                if (existingIngredientMap.has(ing.ingredient_id)) {
+                    // Update existing ingredient
+                    updates.push(
+                        client
+                            .from('drink_ingredients')
+                            .update({
+                                default_amount: ingredientData.default_amount,
+                                is_required: ingredientData.is_required,
+                                is_removable: ingredientData.is_removable,
+                                is_addable: ingredientData.is_addable
+                            })
+                            .eq('product_id', productId)
+                            .eq('ingredient_id', ing.ingredient_id)
+                    );
+                } else {
+                    // Insert new ingredient
+                    inserts.push(ingredientData);
+                }
             }
 
-            return { success: true, drinkIngredients: [] };
+            // Execute updates
+            if (updates.length > 0) {
+                const updateResults = await Promise.all(updates);
+                const updateErrors = updateResults.filter(r => r.error).map(r => r.error);
+                if (updateErrors.length > 0) {
+                    console.error('Error updating ingredients:', updateErrors);
+                    throw updateErrors[0];
+                }
+            }
+
+            // Execute inserts
+            if (inserts.length > 0) {
+                console.log('Inserting new drink ingredients:', inserts);
+                const { data: insertedData, error: insertError } = await client
+                    .from('drink_ingredients')
+                    .insert(inserts)
+                    .select();
+
+                if (insertError) {
+                    console.error('Drink ingredients insert error:', insertError);
+                    console.error('Error code:', insertError.code);
+                    console.error('Error details:', insertError.details);
+                    console.error('Error hint:', insertError.hint);
+                    
+                    if (insertError.message && insertError.message.includes('row-level security')) {
+                        throw new Error(`RLS Policy Error: Cannot save drink ingredients. The database cannot verify your staff permissions.`);
+                    }
+                    
+                    throw insertError;
+                }
+            }
+
+            // Fetch all ingredients to return
+            const { data: allIngredients, error: fetchAllError } = await client
+                .from('drink_ingredients')
+                .select()
+                .eq('product_id', productId);
+
+            if (fetchAllError) {
+                console.error('Error fetching all ingredients:', fetchAllError);
+                // Don't throw - we've already updated/inserted successfully
+            }
+
+            return { success: true, drinkIngredients: allIngredients || [] };
         } catch (error) {
             console.error('Set drink ingredients error:', error);
             return { success: false, error: error.message };
@@ -986,15 +1368,24 @@ class AdminManager {
                 link.setAttribute('aria-label', platform.platform);
                 link.style.color = 'inherit';
                 
-                const iconSvg = this.getSocialIcon(platform.platform);
+                const iconSvg = this.getSocialIcon(platform.platform, platform.url);
                 link.innerHTML = iconSvg;
                 container.appendChild(link);
             });
         });
     }
 
-    getSocialIcon(platformName) {
+    getSocialIcon(platformName, url = '') {
         const name = platformName.toLowerCase();
+        const urlLower = url.toLowerCase();
+        // Check for TikTok by platform name or URL
+        if (name.includes('tiktok') || name.includes('tik-tok') || name === 'tiktok' || name === 'tik tok' || urlLower.includes('tiktok.com') || urlLower.includes('tiktok')) {
+            // TikTok icon - musical note shape (official TikTok logo)
+            console.log('TikTok icon selected for:', platformName, 'URL:', url);
+            return `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+            </svg>`;
+        }
         if (name.includes('instagram')) {
             return `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
@@ -1007,16 +1398,134 @@ class AdminManager {
             return `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
             </svg>`;
-        } else if (name.includes('tiktok')) {
-            // TikTok logo - musical note shape (matching Instagram style)
-            return `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16.6 5.82C15.6 5.82 14.7 5.52 14 5V2H11V15.5C11 17.43 9.43 19 7.5 19C5.57 19 4 17.43 4 15.5C4 13.57 5.57 12 7.5 12C7.9 12 8.3 12.07 8.66 12.21V8.65C8.3 8.6 7.9 8.57 7.5 8.57C3.68 8.57 0.57 11.67 0.57 15.5C0.57 19.33 3.68 22.43 7.5 22.43C11.32 22.43 14.43 19.33 14.43 15.5V10.1C16.1 11.33 18.15 12.06 20.37 12.16V8.61C18.8 8.44 17.47 7.34 16.6 5.82Z" fill="currentColor"/>
-            </svg>`;
         }
         // Generic social icon
         return `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
         </svg>`;
+    }
+
+    // Image generation functions
+    async generateImageForProduct(productId, options = {}) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        // Get the product
+        const { data: product, error: productError } = await client
+            .from('products')
+            .select('*')
+            .eq('id', productId)
+            .single();
+
+        if (productError || !product) {
+            return { success: false, error: 'Product not found' };
+        }
+
+        // Check if OpenAI is configured
+        if (typeof imageGenerator === 'undefined' || !imageGenerator.isConfigured()) {
+            // Try to get API key from config
+            const apiKey = configManager?.config?.openai?.apiKey || 
+                          window.COFFEE_CLUB_CONFIG?.openai?.apiKey;
+            if (apiKey) {
+                imageGenerator.initialize(apiKey);
+            } else {
+                return { 
+                    success: false, 
+                    error: 'OpenAI API key not configured. Please add your API key to config.local.js or config.public.js' 
+                };
+            }
+        }
+
+        try {
+            // Generate the image
+            const result = await imageGenerator.generateImage(product, options);
+            
+            // Update the product with the image URL
+            const { error: updateError } = await client
+                .from('products')
+                .update({ image_url: result.url })
+                .eq('id', productId);
+
+            if (updateError) {
+                return { success: false, error: `Failed to save image URL: ${updateError.message}` };
+            }
+
+            return {
+                success: true,
+                imageUrl: result.url,
+                revisedPrompt: result.revisedPrompt,
+                productId: productId
+            };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    async generateImagesForAllDrinksWithoutImages(options = {}) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        // Get all drinks without images
+        const { data: drinks, error } = await client
+            .from('products')
+            .select('*')
+            .eq('category', 'drink')
+            .eq('available', true)
+            .is('image_url', null);
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        if (!drinks || drinks.length === 0) {
+            return { success: true, message: 'All drinks already have images', generated: 0 };
+        }
+
+        // Check if OpenAI is configured
+        if (typeof imageGenerator === 'undefined' || !imageGenerator.isConfigured()) {
+            const apiKey = configManager?.config?.openai?.apiKey || 
+                          window.COFFEE_CLUB_CONFIG?.openai?.apiKey;
+            if (apiKey) {
+                imageGenerator.initialize(apiKey);
+            } else {
+                return { 
+                    success: false, 
+                    error: 'OpenAI API key not configured. Please add your API key to config.local.js or config.public.js' 
+                };
+            }
+        }
+
+        // Generate images with progress callback
+        const results = await imageGenerator.generateImagesForProducts(drinks, {
+            ...options,
+            onProgress: options.onProgress || (() => {})
+        });
+
+        // Update products with image URLs
+        const updates = [];
+        for (const result of results) {
+            if (result.success && result.imageUrl) {
+                const { error: updateError } = await client
+                    .from('products')
+                    .update({ image_url: result.imageUrl })
+                    .eq('id', result.productId);
+
+                if (!updateError) {
+                    updates.push(result);
+                }
+            }
+        }
+
+        return {
+            success: true,
+            total: drinks.length,
+            generated: updates.length,
+            results: results
+        };
     }
 }
 

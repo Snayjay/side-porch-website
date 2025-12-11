@@ -197,12 +197,13 @@ class AdminUI {
                 </div>
 
                 <!-- Category Type Tabs -->
-                <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 2px solid rgba(139, 111, 71, 0.2);">
-                    <button class="category-type-tab ${this.selectedCategoryType === 'drink' ? 'active' : ''}" 
-                            onclick="adminUI.selectCategoryType('drink')" 
-                            style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'drink' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'drink' ? '600' : '400'};">
-                        Drinks
-                    </button>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 2px solid rgba(139, 111, 71, 0.2); align-items: center;">
+                    <div style="display: flex; gap: 0.5rem; flex: 1;">
+                        <button class="category-type-tab ${this.selectedCategoryType === 'drink' ? 'active' : ''}" 
+                                onclick="adminUI.selectCategoryType('drink')" 
+                                style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'drink' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'drink' ? '600' : '400'};">
+                            Drinks
+                        </button>
                     <button class="category-type-tab ${this.selectedCategoryType === 'ingredient' ? 'active' : ''}" 
                             onclick="adminUI.selectCategoryType('ingredient')" 
                             style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'ingredient' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'ingredient' ? '600' : '400'};">
@@ -218,6 +219,12 @@ class AdminUI {
                             style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 2px solid ${this.selectedCategoryType === 'merch' ? 'var(--accent-orange)' : 'transparent'}; color: var(--deep-brown); cursor: pointer; font-weight: ${this.selectedCategoryType === 'merch' ? '600' : '400'};">
                         Merch
                     </button>
+                    </div>
+                    ${this.selectedCategoryType === 'drink' ? `
+                        <button class="btn btn-sm" onclick="adminUI.generateImagesForAllDrinks()" style="white-space: nowrap;">
+                            Generate All Drink Images
+                        </button>
+                    ` : ''}
                 </div>
 
                 <!-- Categories and Items -->
@@ -273,17 +280,17 @@ class AdminUI {
             <div class="category-section" style="border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 10px; padding: 1.5rem; background: var(--cream);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h4 style="margin: 0; color: var(--deep-brown); font-size: 1.3rem;">${category.name}</h4>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-sm" onclick="adminUI.showCategoryForm('${category.id}')">Edit</button>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-sm" onclick="adminUI.showCategoryForm('${category.id}')" style="background: var(--accent-orange); color: white; border: none; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; cursor: pointer; font-weight: 500;">Edit</button>
                         ${type === 'drink' ? 
-                            `<button class="btn btn-sm" onclick="adminUI.showProductForm(null, '${category.id}', 'drink')">+ Add Drink</button>` :
+                            `<button class="btn btn-sm" onclick="adminUI.showProductForm(null, '${category.id}', 'drink')" style="background: var(--accent-orange); color: white; border: none; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; cursor: pointer; font-weight: 500;">+ Add Drink</button>` :
                             type === 'food' ?
-                            `<button class="btn btn-sm" onclick="adminUI.showProductForm(null, '${category.id}', 'food')">+ Add Food Item</button>` :
+                            `<button class="btn btn-sm" onclick="adminUI.showProductForm(null, '${category.id}', 'food')" style="background: var(--accent-orange); color: white; border: none; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; cursor: pointer; font-weight: 500;">+ Add Food Item</button>` :
                             type === 'merch' ?
-                            `<button class="btn btn-sm" onclick="adminUI.showProductForm(null, '${category.id}', 'merch')">+ Add Merch Item</button>` :
+                            `<button class="btn btn-sm" onclick="adminUI.showProductForm(null, '${category.id}', 'merch')" style="background: var(--accent-orange); color: white; border: none; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; cursor: pointer; font-weight: 500;">+ Add Merch Item</button>` :
                             ''
                         }
-                        <button class="btn btn-sm btn-danger" onclick="adminUI.deleteCategory('${category.id}')">Delete</button>
+                        <button class="btn btn-sm btn-danger" onclick="adminUI.deleteCategory('${category.id}')" style="background: var(--auburn); color: white; border: none; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; cursor: pointer; font-weight: 500;">Delete</button>
                     </div>
                 </div>
         `;
@@ -303,13 +310,17 @@ class AdminUI {
     }
 
     renderDrinkItems(products) {
-        let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">';
+        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
         products.forEach(product => {
+            const tempDisplay = product.temp ? (product.temp.charAt(0).toUpperCase() + product.temp.slice(1)) : '—';
             html += `
-                <div style="background: var(--parchment); padding: 1rem; border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">
-                    <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.5rem;">${product.name}</div>
-                    <div style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.8; margin-bottom: 0.5rem;">$${parseFloat(product.price).toFixed(2)}</div>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--parchment); border-radius: 6px; border: 1px solid rgba(139, 111, 71, 0.2);">
+                    <div style="flex: 1; display: flex; align-items: center; gap: 1rem;">
+                        <div style="font-weight: 600; color: var(--deep-brown); min-width: 150px;">${product.name}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; min-width: 60px;">${tempDisplay}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.8;">$${parseFloat(product.price).toFixed(2)}</div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
                         <button class="btn btn-sm" onclick="adminUI.editProduct('${product.id}')">Edit</button>
                         <button class="btn btn-sm" onclick="adminUI.manageDrinkIngredients('${product.id}')">Recipe</button>
                         <button class="btn btn-sm btn-danger" onclick="adminUI.deleteProduct('${product.id}')">Delete</button>
@@ -322,15 +333,19 @@ class AdminUI {
     }
 
     renderFoodMerchItems(products, type) {
-        let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">';
+        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
         products.forEach(product => {
             html += `
-                <div style="background: var(--parchment); padding: 1rem; border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">
-                    ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" style="width: 100%; height: 150px; object-fit: cover; border-radius: 6px; margin-bottom: 0.75rem;">` : ''}
-                    <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.5rem;">${product.name}</div>
-                    ${product.description ? `<div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-bottom: 0.5rem; line-height: 1.4;">${product.description.substring(0, 60)}${product.description.length > 60 ? '...' : ''}</div>` : ''}
-                    <div style="font-size: 0.9rem; color: var(--deep-brown); font-weight: 600; margin-bottom: 0.75rem;">$${parseFloat(product.price).toFixed(2)}</div>
-                    <div style="display: flex; gap: 0.5rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--parchment); border-radius: 6px; border: 1px solid rgba(139, 111, 71, 0.2);">
+                    <div style="flex: 1; display: flex; align-items: center; gap: 1rem;">
+                        ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; flex-shrink: 0;">` : ''}
+                        <div style="min-width: 150px;">
+                            <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">${product.name}</div>
+                            ${product.description ? `<div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; line-height: 1.3;">${product.description.substring(0, 80)}${product.description.length > 80 ? '...' : ''}</div>` : ''}
+                        </div>
+                        <div style="font-size: 0.9rem; color: var(--deep-brown); font-weight: 600; min-width: 80px;">$${parseFloat(product.price).toFixed(2)}</div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
                         <button class="btn btn-sm" onclick="adminUI.editProduct('${product.id}')">Edit</button>
                         <button class="btn btn-sm btn-danger" onclick="adminUI.deleteProduct('${product.id}')">Delete</button>
                     </div>
@@ -426,6 +441,12 @@ class AdminUI {
 
         if (result.success) {
             document.querySelector('.admin-modal-overlay')?.remove();
+            
+            // If creating a new category, switch to its type tab so it's visible
+            if (!this.editingCategory && categoryData.type) {
+                this.selectedCategoryType = categoryData.type;
+            }
+            
             await this.renderMenuManagementView();
             errorDialog.showSuccess(
                 this.editingCategory ? 'Category updated successfully!' : 'Category created successfully!',
@@ -439,11 +460,31 @@ class AdminUI {
     }
 
     async deleteCategory(categoryId) {
-        if (!confirm('Are you sure you want to delete this category? All items in this category will also be deleted.')) return;
+        // First check if category has any items
+        const productsResult = await adminManager.getProductsByCategory(categoryId, true);
+        const products = productsResult.success ? productsResult.products : [];
+        
+        if (products && products.length > 0) {
+            errorDialog.show(
+                `Cannot delete category: There are ${products.length} item(s) in this category. Please remove or move all items before deleting the category.`,
+                'Cannot Delete Category'
+            );
+            return;
+        }
+        
+        // Get category name for confirmation message
+        const categoriesResult = await adminManager.getAllCategories(null, true);
+        const category = categoriesResult.categories?.find(c => c.id === categoryId);
+        const categoryName = category?.name || 'this category';
+        
+        if (!confirm(`Are you sure you want to delete "${categoryName}"? This action cannot be undone.`)) {
+            return;
+        }
+        
         const result = await adminManager.deleteCategory(categoryId);
         if (result.success) {
             await this.renderMenuManagementView();
-            errorDialog.showSuccess('Category deleted successfully!', 'Success');
+            errorDialog.showSuccess(`Category "${categoryName}" deleted successfully!`, 'Success');
         } else {
             errorDialog.show(result.error || 'Error deleting category', 'Error');
         }
@@ -513,6 +554,325 @@ class AdminUI {
 
         if (productId) {
             await this.loadProductData(productId);
+        } else if (productType === 'drink') {
+            // Initialize with one empty ingredient row for new drinks
+            await this.initializeIngredientRows();
+        }
+    }
+
+    async initializeIngredientRows() {
+        const ingredientsResult = await adminManager.getAllIngredients(true);
+        const allIngredients = ingredientsResult.ingredients || [];
+        const unitTypesResult = await adminManager.getAllUnitTypes(true);
+        const unitTypes = unitTypesResult.unitTypes || [];
+        
+        // Store for use in ingredient management
+        this.availableIngredients = allIngredients;
+        this.availableUnitTypes = unitTypes;
+        
+        // Initialize saved ingredients list
+        this.savedIngredients = [];
+        
+        // Create the new ingredient input row
+        this.createNewIngredientRow();
+    }
+
+    createNewIngredientRow() {
+        const container = document.getElementById('new-ingredient-row');
+        if (!container) return;
+        
+        const ingredients = this.availableIngredients || [];
+        const unitTypes = this.availableUnitTypes || [];
+        
+        // Build ingredient options (without unit type in display)
+        // Sort ingredients alphabetically by name
+        const sortedIngredients = [...ingredients].sort((a, b) => {
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+        
+        let ingredientOptions = '<option value="">Select ingredient...</option>';
+        sortedIngredients.forEach(ing => {
+            ingredientOptions += `<option value="${ing.id}" data-default-unit="${ing.unit_type}">${ing.name}</option>`;
+        });
+        
+        // Build unit type options (include "parts" for ratio-based recipes)
+        let unitOptions = '<option value="parts">Parts</option>';
+        unitTypes.forEach(ut => {
+            unitOptions += `<option value="${ut.name}">${ut.display_name || ut.name}</option>`;
+        });
+        
+        container.innerHTML = `
+            <div style="flex: 2;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Ingredient</label>
+                <select id="new-ingredient-select" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                    ${ingredientOptions}
+                </select>
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Unit</label>
+                <select id="new-ingredient-unit" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                    ${unitOptions}
+                </select>
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Quantity</label>
+                <input type="number" id="new-ingredient-quantity" step="0.1" min="0" placeholder="0" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 0 0 auto; padding-bottom: 0.25rem;">
+                <button type="button" onclick="adminUI.addIngredientToList()" class="btn btn-sm" style="background: var(--accent-orange); color: white; padding: 0.5rem 1rem; font-size: 0.9rem; white-space: nowrap;">
+                    Add to Recipe
+                </button>
+            </div>
+        `;
+    }
+
+    addIngredientToList() {
+        const ingredientSelect = document.getElementById('new-ingredient-select');
+        const unitSelect = document.getElementById('new-ingredient-unit');
+        const quantityInput = document.getElementById('new-ingredient-quantity');
+        
+        const ingredientId = ingredientSelect?.value;
+        const unit = unitSelect?.value || '';
+        const quantity = parseFloat(quantityInput?.value || 0);
+        
+        if (!ingredientId) {
+            errorDialog.show('Please select an ingredient', 'Validation Error');
+            return;
+        }
+        
+        if (!quantity || quantity <= 0) {
+            errorDialog.show('Please enter a quantity greater than 0', 'Validation Error');
+            return;
+        }
+        
+        // Check if this ingredient is already in the saved ingredients list
+        if (!this.savedIngredients) {
+            this.savedIngredients = [];
+        }
+        
+        const existingIngredient = this.savedIngredients.find(si => si.ingredient_id === ingredientId);
+        if (existingIngredient) {
+            errorDialog.show('This ingredient is already in the recipe. Please edit or remove the existing entry first.', 'Duplicate Ingredient');
+            return;
+        }
+        
+        const ingredients = this.availableIngredients || [];
+        const unitTypes = this.availableUnitTypes || [];
+        const ingredient = ingredients.find(i => i.id === ingredientId);
+        
+        if (!ingredient) return;
+        
+        // Get unit display name
+        let unitDisplay = 'Parts';
+        if (unit === 'parts') {
+            unitDisplay = 'Parts';
+        } else {
+            const unitType = unitTypes.find(ut => ut.name === unit);
+            unitDisplay = unitType?.display_name || unitType?.name || unit;
+        }
+        
+        // Add to saved ingredients
+        const savedIngredient = {
+            id: Date.now() + Math.random().toString(36).substr(2, 9), // Unique ID
+            ingredient_id: ingredientId,
+            ingredient_name: ingredient.name,
+            unit: unit,
+            unit_display: unitDisplay,
+            quantity: quantity
+        };
+        
+        this.savedIngredients.push(savedIngredient);
+        
+        // Refresh the saved ingredients display
+        this.renderSavedIngredients();
+        
+        // Clear the input fields
+        ingredientSelect.value = '';
+        unitSelect.value = 'parts';
+        quantityInput.value = '';
+    }
+
+    renderSavedIngredients() {
+        const container = document.getElementById('saved-ingredients-container');
+        if (!container) return;
+        
+        if (!this.savedIngredients || this.savedIngredients.length === 0) {
+            container.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No ingredients added yet. Add ingredients below.</p>';
+            return;
+        }
+        
+        const ingredients = this.availableIngredients || [];
+        const unitTypes = this.availableUnitTypes || [];
+        
+        let html = '<div style="display: flex; flex-direction: column; gap: 0.5rem;">';
+        
+        this.savedIngredients.forEach((savedIng, index) => {
+            const ingredient = ingredients.find(i => i.id === savedIng.ingredient_id);
+            if (!ingredient) return;
+            
+            html += `
+                <div class="saved-ingredient-row" data-ingredient-id="${savedIng.id}" style="display: flex; gap: 0.75rem; align-items: center; padding: 0.75rem; background: white; border: 1px solid rgba(139, 111, 71, 0.2); border-radius: 6px;">
+                    <div style="flex: 2; font-weight: 500; color: var(--deep-brown);">
+                        ${savedIng.ingredient_name} (${savedIng.unit_display})
+                    </div>
+                    <div style="flex: 1; color: var(--text-dark);">
+                        Quantity: <strong>${savedIng.quantity}</strong>
+                    </div>
+                    <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;">
+                        <button type="button" onclick="adminUI.editSavedIngredient('${savedIng.id}')" style="background: var(--accent-orange); color: white; border: none; border-radius: 4px; padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.85rem;">
+                            Edit
+                        </button>
+                        <button type="button" onclick="adminUI.removeSavedIngredient('${savedIng.id}')" style="background: var(--auburn); color: white; border: none; border-radius: 4px; padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.85rem;">
+                            Remove
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    editSavedIngredient(savedIngredientId) {
+        const savedIng = this.savedIngredients.find(si => si.id === savedIngredientId);
+        if (!savedIng) return;
+        
+        // Remove from saved list
+        this.savedIngredients = this.savedIngredients.filter(si => si.id !== savedIngredientId);
+        this.renderSavedIngredients();
+        
+        // Populate the new ingredient row with this data
+        const ingredientSelect = document.getElementById('new-ingredient-select');
+        const unitSelect = document.getElementById('new-ingredient-unit');
+        const quantityInput = document.getElementById('new-ingredient-quantity');
+        
+        if (ingredientSelect) ingredientSelect.value = savedIng.ingredient_id;
+        if (unitSelect) unitSelect.value = savedIng.unit;
+        if (quantityInput) quantityInput.value = savedIng.quantity;
+    }
+
+    removeSavedIngredient(savedIngredientId) {
+        this.savedIngredients = this.savedIngredients.filter(si => si.id !== savedIngredientId);
+        this.renderSavedIngredients();
+    }
+
+    addIngredientRow(ingredientData = null) {
+        const container = document.getElementById('drink-ingredients-list');
+        if (!container) return;
+        
+        const rowId = 'ingredient-row-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        const ingredients = this.availableIngredients || [];
+        const unitTypes = this.availableUnitTypes || [];
+        
+        // Build ingredient options (without unit type in display)
+        // Sort ingredients alphabetically by name
+        const sortedIngredients = [...ingredients].sort((a, b) => {
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+        
+        let ingredientOptions = '<option value="">Select ingredient...</option>';
+        sortedIngredients.forEach(ing => {
+            const selected = ingredientData && ingredientData.ingredient_id === ing.id ? 'selected' : '';
+            ingredientOptions += `<option value="${ing.id}" data-default-unit="${ing.unit_type}" ${selected}>${ing.name}</option>`;
+        });
+        
+        // Build unit type options (include "parts" for ratio-based recipes)
+        let unitOptions = '<option value="parts">Parts</option>';
+        unitTypes.forEach(ut => {
+            const selected = ingredientData && ingredientData.unit === ut.name ? 'selected' : '';
+            unitOptions += `<option value="${ut.name}" ${selected}>${ut.display_name || ut.name}</option>`;
+        });
+        
+        // Get selected unit display name
+        const selectedUnit = ingredientData?.unit || 'parts';
+        const selectedUnitDisplay = selectedUnit === 'parts' ? 'Parts' : 
+            (unitTypes.find(ut => ut.name === selectedUnit)?.display_name || selectedUnit);
+        
+        const row = document.createElement('div');
+        row.id = rowId;
+        row.className = 'ingredient-row';
+        row.style.cssText = 'display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 1rem; padding: 1rem; background: var(--cream); border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);';
+        
+        row.innerHTML = `
+            <div style="flex: 2;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Ingredient</label>
+                <select class="ingredient-select" data-row-id="${rowId}" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                    ${ingredientOptions}
+                </select>
+                <div class="ingredient-display" style="font-size: 0.8rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.25rem; min-height: 1rem;">
+                    ${ingredientData ? `${ingredients.find(i => i.id === ingredientData.ingredient_id)?.name || ''} (${selectedUnitDisplay})` : ''}
+                </div>
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Unit</label>
+                <select class="ingredient-unit" data-row-id="${rowId}" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                    ${unitOptions}
+                </select>
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Quantity</label>
+                <input type="number" class="ingredient-quantity" step="0.1" min="0" value="${ingredientData?.quantity || ''}" placeholder="0" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 0 0 auto; padding-top: 1.5rem;">
+                <button type="button" onclick="adminUI.removeIngredientRow('${rowId}')" style="background: var(--auburn); color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.9rem;" title="Remove ingredient">
+                    ✕
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(row);
+        
+        // Add event listeners to update display when ingredient or unit changes
+        const ingredientSelect = row.querySelector('.ingredient-select');
+        const unitSelect = row.querySelector('.ingredient-unit');
+        const displayDiv = row.querySelector('.ingredient-display');
+        
+        const updateDisplay = () => {
+            const selectedIngredientId = ingredientSelect.value;
+            const selectedUnitValue = unitSelect.value;
+            
+            if (selectedIngredientId) {
+                const ingredient = ingredients.find(i => i.id === selectedIngredientId);
+                if (ingredient) {
+                    // Get unit display name
+                    let unitDisplay = 'Parts';
+                    if (selectedUnitValue === 'parts') {
+                        unitDisplay = 'Parts';
+                    } else {
+                        const unitType = unitTypes.find(ut => ut.name === selectedUnitValue);
+                        unitDisplay = unitType?.display_name || unitType?.name || selectedUnitValue;
+                    }
+                    
+                    displayDiv.textContent = `${ingredient.name} (${unitDisplay})`;
+                    displayDiv.style.display = 'block';
+                } else {
+                    displayDiv.textContent = '';
+                    displayDiv.style.display = 'none';
+                }
+            } else {
+                displayDiv.textContent = '';
+                displayDiv.style.display = 'none';
+            }
+        };
+        
+        ingredientSelect.addEventListener('change', updateDisplay);
+        unitSelect.addEventListener('change', updateDisplay);
+        
+        // Initial update if ingredient is already selected
+        if (ingredientData && ingredientData.ingredient_id) {
+            updateDisplay();
+        }
+    }
+
+    removeIngredientRow(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) {
+            row.remove();
         }
     }
 
@@ -549,17 +909,62 @@ class AdminUI {
                     <label for="product-tax-rate">Tax Rate</label>
                     <input type="number" id="product-tax-rate" step="0.0001" min="0" max="1" value="0.0825">
                 </div>
-                ${!isDrink ? `
+                ${isDrink ? `
                     <div class="form-group">
-                        <label for="product-image-url">Image URL</label>
-                        <input type="url" id="product-image-url" placeholder="https://example.com/image.jpg">
+                        <label for="product-temp">Temp *</label>
+                        <select id="product-temp" required>
+                            <option value="">Select temperature...</option>
+                            <option value="hot">Hot</option>
+                            <option value="cold">Cold</option>
+                            <option value="both">Both</option>
+                        </select>
                     </div>
                 ` : ''}
+                <div class="form-group">
+                    <label for="product-image-url">Image URL</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+                        <input type="url" id="product-image-url" placeholder="https://example.com/image.jpg" style="flex: 1;">
+                        ${isDrink ? `
+                            <button type="button" class="btn btn-sm" onclick="adminUI.generateImageForCurrentProduct()" style="white-space: nowrap;">
+                                Generate AI Image
+                            </button>
+                        ` : ''}
+                    </div>
+                    ${isDrink ? `
+                        <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.5rem;">
+                            Use AI to generate a professional image for this drink
+                        </p>
+                    ` : ''}
+                </div>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="product-available" checked> Available
                     </label>
                 </div>
+                ${isDrink ? `
+                    <div class="form-group" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2);">
+                        <label style="font-size: 1.1rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 1rem; display: block;">Recipe Ingredients</label>
+                        <p style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.7; margin-bottom: 1rem;">
+                            Add ingredients to build the recipe. Use "Parts" as the unit for ratio-based recipes (e.g., 1 Part Water, 2 Parts Espresso).
+                        </p>
+                        
+                        <!-- Saved Ingredients List -->
+                        <div id="saved-ingredients-list" style="margin-bottom: 1.5rem;">
+                            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem;">Saved Ingredients</h4>
+                            <div id="saved-ingredients-container" style="min-height: 2rem;">
+                                <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No ingredients added yet. Add ingredients below.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Add New Ingredient Section -->
+                        <div style="background: var(--cream); padding: 1rem; border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2); margin-bottom: 1rem;">
+                            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem;">Add New Ingredient</h4>
+                            <div id="new-ingredient-row" style="display: flex; gap: 0.75rem; align-items: flex-end;">
+                                <!-- New ingredient input fields will be added here -->
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
                 <div id="product-form-error" style="color: var(--auburn); margin-bottom: 1rem; display: none;"></div>
                 <div style="display: flex; gap: 1rem; justify-content: flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="this.closest('.admin-modal-overlay').remove()">Cancel</button>
@@ -577,11 +982,16 @@ class AdminUI {
         if (product) {
             // Update category dropdown if needed
             const categorySelect = document.getElementById('product-category-id');
+            let categoryType = null;
             if (categorySelect && product.category_id) {
                 const option = categorySelect.querySelector(`option[value="${product.category_id}"]`);
                 if (option) {
                     option.selected = true;
                 }
+                // Get category type from the categories loaded in the form
+                const categoryResult = await adminManager.getAllCategories(null, true);
+                const category = categoryResult.categories?.find(c => c.id === product.category_id);
+                categoryType = category?.type;
             }
 
             document.getElementById('product-name').value = product.name || '';
@@ -592,8 +1002,68 @@ class AdminUI {
             if (imageInput) {
                 imageInput.value = product.image_url || '';
             }
+            const tempInput = document.getElementById('product-temp');
+            if (tempInput) {
+                tempInput.value = product.temp || '';
+            }
             document.getElementById('product-available').checked = product.available !== false;
+            
+            // Load ingredients if it's a drink
+            if (categoryType === 'drink') {
+                await this.loadDrinkIngredients(productId);
+            }
         }
+    }
+
+    async loadDrinkIngredients(productId) {
+        // Initialize ingredient rows first
+        await this.initializeIngredientRows();
+        
+        // Load existing drink ingredients
+        const drinkIngredientsResult = await adminManager.getDrinkIngredients(productId);
+        const drinkIngredients = drinkIngredientsResult.drinkIngredients || [];
+        
+        if (drinkIngredients.length === 0) {
+            return;
+        }
+        
+        // Load all ingredients to get their names
+        const ingredientsResult = await adminManager.getAllIngredients(true);
+        const allIngredients = ingredientsResult.ingredients || [];
+        const unitTypesResult = await adminManager.getAllUnitTypes(true);
+        const unitTypes = unitTypesResult.unitTypes || [];
+        const ingredientMap = {};
+        allIngredients.forEach(ing => {
+            ingredientMap[ing.id] = ing;
+        });
+        
+        // Populate saved ingredients from existing drink ingredients
+        this.savedIngredients = [];
+        for (const di of drinkIngredients) {
+            const ingredient = ingredientMap[di.ingredient_id];
+            if (ingredient) {
+                // Default to ingredient's unit_type if not specified
+                const unit = ingredient.unit_type || 'parts';
+                let unitDisplay = 'Parts';
+                if (unit === 'parts') {
+                    unitDisplay = 'Parts';
+                } else {
+                    const unitType = unitTypes.find(ut => ut.name === unit);
+                    unitDisplay = unitType?.display_name || unitType?.name || unit;
+                }
+                
+                this.savedIngredients.push({
+                    id: Date.now() + Math.random().toString(36).substr(2, 9),
+                    ingredient_id: di.ingredient_id,
+                    ingredient_name: ingredient.name,
+                    unit: unit,
+                    unit_display: unitDisplay,
+                    quantity: parseFloat(di.default_amount || 0)
+                });
+            }
+        }
+        
+        this.renderSavedIngredients();
     }
 
     async saveProduct(event) {
@@ -601,41 +1071,117 @@ class AdminUI {
         const errorDiv = document.getElementById('product-form-error');
         errorDiv.style.display = 'none';
 
-        const categoryId = document.getElementById('product-category-id').value;
-        if (!categoryId) {
-            errorDiv.textContent = 'Please select a category';
+        try {
+            const categoryId = document.getElementById('product-category-id').value;
+            if (!categoryId) {
+                errorDiv.textContent = 'Please select a category';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const name = document.getElementById('product-name').value.trim();
+            if (!name) {
+                errorDiv.textContent = 'Please enter a product name';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const price = document.getElementById('product-price').value;
+            if (!price || parseFloat(price) < 0) {
+                errorDiv.textContent = 'Please enter a valid price';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const productData = {
+                name: name,
+                description: document.getElementById('product-description').value.trim(),
+                category_id: categoryId,
+                price: price,
+                tax_rate: document.getElementById('product-tax-rate').value,
+                image_url: document.getElementById('product-image-url')?.value.trim() || null,
+                available: document.getElementById('product-available').checked
+            };
+
+            // Add temp field for drinks
+            const tempInput = document.getElementById('product-temp');
+            if (tempInput) {
+                productData.temp = tempInput.value || null;
+            }
+
+            console.log('Saving product:', productData);
+
+            let result;
+            if (this.editingProduct) {
+                console.log('Updating product:', this.editingProduct);
+                result = await adminManager.updateProduct(this.editingProduct, productData);
+            } else {
+                console.log('Creating new product');
+                result = await adminManager.createProduct(productData);
+            }
+
+            console.log('Product save result:', result);
+
+            if (result.success) {
+                const productId = result.product?.id || this.editingProduct;
+                console.log('Product saved with ID:', productId);
+                
+                // Save ingredients if it's a drink
+                const savedIngredientsContainer = document.getElementById('saved-ingredients-container');
+                if (savedIngredientsContainer && productId) {
+                    try {
+                        console.log('Saving ingredients for product:', productId);
+                        await this.saveDrinkIngredientsFromForm(productId);
+                        console.log('Ingredients saved successfully');
+                    } catch (error) {
+                        console.error('Error saving ingredients:', error);
+                        errorDiv.textContent = `Item saved but failed to save ingredients: ${error.message}`;
+                        errorDiv.style.display = 'block';
+                        return; // Don't close modal if ingredients failed to save
+                    }
+                }
+                
+                document.querySelector('.admin-modal-overlay')?.remove();
+                await this.renderMenuManagementView();
+                errorDialog.showSuccess(
+                    this.editingProduct ? 'Item updated successfully!' : 'Item created successfully!',
+                    'Success'
+                );
+                this.editingProduct = null;
+                this.savedIngredients = []; // Clear saved ingredients
+            } else {
+                const errorMsg = result.error || 'Error saving item';
+                console.error('Save product error:', result);
+                errorDiv.textContent = errorMsg;
+                errorDiv.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Unexpected error saving product:', error);
+            errorDiv.textContent = `Unexpected error: ${error.message}`;
             errorDiv.style.display = 'block';
+        }
+    }
+
+    async saveDrinkIngredientsFromForm(productId) {
+        if (!this.savedIngredients || this.savedIngredients.length === 0) {
+            // No ingredients to save, clear existing ingredients
+            await adminManager.setDrinkIngredients(productId, []);
             return;
         }
-
-        const productData = {
-            name: document.getElementById('product-name').value.trim(),
-            description: document.getElementById('product-description').value.trim(),
-            category_id: categoryId,
-            price: document.getElementById('product-price').value,
-            tax_rate: document.getElementById('product-tax-rate').value,
-            image_url: document.getElementById('product-image-url')?.value.trim() || null,
-            available: document.getElementById('product-available').checked
-        };
-
-        let result;
-        if (this.editingProduct) {
-            result = await adminManager.updateProduct(this.editingProduct, productData);
-        } else {
-            result = await adminManager.createProduct(productData);
-        }
-
-        if (result.success) {
-            document.querySelector('.admin-modal-overlay')?.remove();
-            await this.renderMenuManagementView();
-            errorDialog.showSuccess(
-                this.editingProduct ? 'Item updated successfully!' : 'Item created successfully!',
-                'Success'
-            );
-            this.editingProduct = null;
-        } else {
-            errorDiv.textContent = result.error || 'Error saving item';
-            errorDiv.style.display = 'block';
+        
+        // Convert saved ingredients to format expected by setDrinkIngredients
+        const drinkIngredients = this.savedIngredients.map(savedIng => ({
+            ingredient_id: savedIng.ingredient_id,
+            default_amount: savedIng.quantity,
+            is_required: false,
+            is_removable: true,
+            is_addable: false
+        }));
+        
+        const result = await adminManager.setDrinkIngredients(productId, drinkIngredients);
+        if (!result.success) {
+            console.error('Error saving drink ingredients:', result.error);
+            throw new Error(result.error || 'Failed to save ingredients');
         }
     }
 
@@ -1857,6 +2403,122 @@ class AdminUI {
                 errorDialog.show(message, 'Cannot Delete Unit Type');
             } else {
                 errorDialog.show(result.error || 'Error deleting unit type', 'Error');
+            }
+        }
+    }
+
+    async generateImageForCurrentProduct() {
+        const productId = this.editingProduct;
+        if (!productId) {
+            errorDialog.show('No product selected', 'Error');
+            return;
+        }
+
+        const btn = document.getElementById('generate-image-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+        }
+
+        try {
+            const result = await adminManager.generateImageForProduct(productId);
+            
+            if (result.success) {
+                // Update the image URL input
+                const imageInput = document.getElementById('product-image-url');
+                if (imageInput) {
+                    imageInput.value = result.imageUrl;
+                }
+                errorDialog.showSuccess('Image generated successfully!', 'Success');
+            } else {
+                errorDialog.show(result.error || 'Failed to generate image', 'Error');
+            }
+        } catch (error) {
+            console.error('Image generation error:', error);
+            errorDialog.show(error.message || 'Failed to generate image', 'Error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Generate AI Image';
+            }
+        }
+    }
+
+    async generateImagesForAllDrinks() {
+        if (!confirm('This will generate AI images for all drinks without images. This may take several minutes and use API credits. Continue?')) {
+            return;
+        }
+
+        // Create a progress modal
+        const overlay = document.createElement('div');
+        overlay.className = 'admin-modal-overlay';
+        overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 10000;';
+        
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background: var(--parchment); padding: 2rem; border-radius: 12px; max-width: 500px; width: 90%;';
+        modal.innerHTML = `
+            <h3 style="margin: 0 0 1rem 0; color: var(--deep-brown);">Generating Images</h3>
+            <div id="image-gen-progress" style="margin-bottom: 1rem;">
+                <p style="color: var(--text-dark);">Starting...</p>
+            </div>
+            <button class="btn" onclick="this.closest('.admin-modal-overlay').remove()" id="close-progress-btn" style="display: none;">Close</button>
+        `;
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        const progressDiv = document.getElementById('image-gen-progress');
+        const closeBtn = document.getElementById('close-progress-btn');
+
+        try {
+            const result = await adminManager.generateImagesForAllDrinksWithoutImages({
+                onProgress: (progress) => {
+                    if (progressDiv) {
+                        progressDiv.innerHTML = `
+                            <p style="color: var(--text-dark); margin-bottom: 0.5rem;">
+                                Generating image ${progress.current} of ${progress.total}...
+                            </p>
+                            <p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem;">
+                                ${progress.product}
+                            </p>
+                        `;
+                    }
+                }
+            });
+
+            if (result.success) {
+                progressDiv.innerHTML = `
+                    <p style="color: var(--auburn); font-weight: 600; margin-bottom: 0.5rem;">
+                        ✓ Successfully generated ${result.generated} images!
+                    </p>
+                    ${result.total > result.generated ? `
+                        <p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem;">
+                            ${result.total - result.generated} drinks already had images
+                        </p>
+                    ` : ''}
+                `;
+                closeBtn.style.display = 'block';
+                
+                // Refresh the menu view
+                await this.renderMenuManagementView();
+            } else {
+                progressDiv.innerHTML = `
+                    <p style="color: var(--auburn); font-weight: 600;">
+                        Error: ${result.error}
+                    </p>
+                `;
+                closeBtn.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Batch image generation error:', error);
+            if (progressDiv) {
+                progressDiv.innerHTML = `
+                    <p style="color: var(--auburn); font-weight: 600;">
+                        Error: ${error.message}
+                    </p>
+                `;
+            }
+            if (closeBtn) {
+                closeBtn.style.display = 'block';
             }
         }
     }

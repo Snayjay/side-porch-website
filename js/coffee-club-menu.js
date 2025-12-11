@@ -5,17 +5,45 @@ class CoffeeClubMenu {
     constructor() {
         this.products = [];
         this.cart = [];
-        this.loadProducts();
+        this.productsLoaded = false;
+        
+        // Wait for Supabase to be ready before loading products
+        if (typeof configManager !== 'undefined' && configManager.isSupabaseConfigured()) {
+            // Supabase is configured, wait for it to be ready
+            window.addEventListener('supabaseReady', () => {
+                this.loadProducts();
+            }, { once: true });
+            
+            // Fallback: Check if Supabase is already ready
+            setTimeout(() => {
+                const client = getSupabaseClient();
+                if (client && !this.productsLoaded) {
+                    this.loadProducts();
+                }
+            }, 100);
+        } else {
+            // Supabase not configured yet, wait for config
+            window.addEventListener('configLoaded', () => {
+                if (configManager.isSupabaseConfigured()) {
+                    window.addEventListener('supabaseReady', () => {
+                        this.loadProducts();
+                    }, { once: true });
+                }
+            }, { once: true });
+        }
     }
 
     async loadProducts() {
         const client = getSupabaseClient();
         if (!client) {
-            console.error('Supabase not configured');
+            console.error('Supabase not configured - will retry when Supabase is ready');
             this.products = [];
             this.renderMenu();
+            // Don't set productsLoaded to true, so it will retry later
             return;
         }
+        
+        this.productsLoaded = true;
 
         try {
             // Load products with their categories
@@ -35,6 +63,14 @@ class CoffeeClubMenu {
             if (error) throw error;
             
             this.products = data || [];
+            console.log('Loaded products for Coffee Club Menu:', this.products.length);
+            console.log('Sample products:', this.products.slice(0, 3).map(p => ({
+                id: p.id,
+                name: p.name,
+                category_id: p.category_id,
+                has_menu_categories: !!p.menu_categories,
+                menu_categories: p.menu_categories
+            })));
         } catch (error) {
             console.error('Load products error:', error);
             this.products = [];
@@ -57,33 +93,46 @@ class CoffeeClubMenu {
         const categoriesMap = {};
         
         this.products.forEach(product => {
-            if (product.menu_categories && product.category_id) {
-                const category = product.menu_categories;
-                const categoryId = product.category_id;
-                
-                if (!categoriesMap[categoryId]) {
-                    // Get emoji for category type
-                    const emoji = this.getCategoryEmoji(category.type);
-                    categoriesMap[categoryId] = {
-                        id: categoryId,
-                        name: category.name,
-                        type: category.type,
-                        emoji: emoji,
-                        products: [],
-                        sections: {}
-                    };
+            // Check if product has category relationship
+            if (!product.category_id) {
+                console.warn('Product missing category_id:', product.id, product.name);
+                return; // Skip products without category_id
+            }
+            
+            // Handle both single category object and array (Supabase join can return either)
+            const category = Array.isArray(product.menu_categories) 
+                ? product.menu_categories[0] 
+                : product.menu_categories;
+            
+            if (!category) {
+                console.warn('Product missing menu_categories relationship:', product.id, product.name, 'category_id:', product.category_id);
+                return; // Skip products without category relationship
+            }
+            
+            const categoryId = product.category_id;
+            
+            if (!categoriesMap[categoryId]) {
+                // Get emoji for category type
+                const emoji = this.getCategoryEmoji(category.type);
+                categoriesMap[categoryId] = {
+                    id: categoryId,
+                    name: category.name,
+                    type: category.type,
+                    emoji: emoji,
+                    products: [],
+                    sections: {}
+                };
+            }
+            
+            // For drinks, group by menu_section if available
+            if (category.type === 'drink' && product.menu_section) {
+                const section = product.menu_section;
+                if (!categoriesMap[categoryId].sections[section]) {
+                    categoriesMap[categoryId].sections[section] = [];
                 }
-                
-                // For drinks, group by menu_section if available
-                if (category.type === 'drink' && product.menu_section) {
-                    const section = product.menu_section;
-                    if (!categoriesMap[categoryId].sections[section]) {
-                        categoriesMap[categoryId].sections[section] = [];
-                    }
-                    categoriesMap[categoryId].sections[section].push(product);
-                } else {
-                    categoriesMap[categoryId].products.push(product);
-                }
+                categoriesMap[categoryId].sections[section].push(product);
+            } else {
+                categoriesMap[categoryId].products.push(product);
             }
         });
 
@@ -154,10 +203,16 @@ class CoffeeClubMenu {
         const isDrink = categoryType === 'drink';
         const description = product.description || '';
         const productId = product.id;
+        const hasImage = product.image_url && product.image_url.trim() !== '';
         
         return `
             <div class="menu-line-item" data-product-id="${productId}">
-                <div class="menu-line-item-info">
+                ${hasImage ? `
+                    <div class="menu-line-item-image" style="width: 60px; height: 60px; flex-shrink: 0; border-radius: 8px; overflow: hidden; margin-right: 1rem;">
+                        <img src="${product.image_url}" alt="${this.escapeHtml(product.name)}" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                ` : ''}
+                <div class="menu-line-item-info" style="${hasImage ? '' : 'flex: 1;'}">
                     <div class="menu-item-name-text">${this.escapeHtml(product.name)}</div>
                     ${description ? `<div class="menu-item-description">${this.escapeHtml(description)}</div>` : ''}
                 </div>
@@ -204,7 +259,7 @@ class CoffeeClubMenu {
     }
 
     addCustomizedDrinkToCart(customizedDrink) {
-        const { product, customizations, priceAdjustment, finalPrice } = customizedDrink;
+        const { product, customizations, recipeIngredients, priceAdjustment, finalPrice } = customizedDrink;
         
         // Create a unique cart item ID that includes customizations
         const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -220,7 +275,8 @@ class CoffeeClubMenu {
             finalPrice: finalPrice,
             taxRate: parseFloat(product.tax_rate || 0.0825),
             quantity: 1,
-            customizations: customizations
+            customizations: customizations, // Price adjustments only
+            recipeIngredients: recipeIngredients || [] // Full recipe for order label
         });
 
         this.updateCartDisplay();
