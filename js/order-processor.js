@@ -13,12 +13,18 @@ class OrderProcessor {
             return { success: false, error: 'User not authenticated' };
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             // Create order
             const { data: order, error: orderError } = await client
                 .from('orders')
                 .insert({
                     account_id: user.id,
+                    shop_id: shopId,
                     subtotal: totals.subtotal,
                     tax: totals.tax,
                     total: totals.total,
@@ -39,6 +45,7 @@ class OrderProcessor {
 
                 return {
                     order_id: order.id,
+                    shop_id: shopId,
                     product_id: item.productId,
                     product_name: item.name,
                     product_category: item.category,
@@ -92,6 +99,7 @@ class OrderProcessor {
                 .from('account_transactions')
                 .insert({
                     account_id: user.id,
+                    shop_id: shopId,
                     type: 'purchase',
                     amount: totals.total,
                     description: `Order #${order.id.substring(0, 8)}`
@@ -117,14 +125,22 @@ class OrderProcessor {
             return [];
         }
 
+        const shopId = configManager.getShopId();
+
         try {
-            const { data, error } = await client
+            let query = client
                 .from('orders')
                 .select(`
                     *,
                     order_items (*)
                 `)
-                .eq('account_id', user.id)
+                .eq('account_id', user.id);
+            
+            if (shopId) {
+                query = query.eq('shop_id', shopId);
+            }
+            
+            const { data, error } = await query
                 .order('created_at', { ascending: false })
                 .limit(limit);
 

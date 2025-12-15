@@ -14,11 +14,17 @@ class MenuDisplay {
             return { success: false, error: 'Supabase not configured' };
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             let query = client
                 .from('menu_categories')
                 .select('*')
                 .eq('available', true)
+                .eq('shop_id', shopId)
                 .order('display_order', { ascending: true })
                 .order('type', { ascending: true })
                 .order('name', { ascending: true });
@@ -44,6 +50,11 @@ class MenuDisplay {
             return { success: false, error: 'Supabase not configured' };
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             const { data, error } = await client
                 .from('products')
@@ -56,6 +67,7 @@ class MenuDisplay {
                     )
                 `)
                 .eq('available', true)
+                .eq('shop_id', shopId)
                 .order('name', { ascending: true });
 
             if (error) throw error;

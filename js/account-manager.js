@@ -18,20 +18,53 @@ class AccountManager {
             return null;
         }
 
+        const shopId = configManager.getShopId();
+
         try {
-            const { data, error } = await client
+            let query = client
                 .from('coffee_club_accounts')
                 .select('*')
-                .eq('id', user.id)
-                .single();
+                .eq('id', user.id);
+            
+            if (shopId) {
+                query = query.eq('shop_id', shopId);
+            }
+            
+            const { data, error } = await query.single();
 
             if (error) throw error;
+            
+            // If account exists but doesn't have shop_id, update it
+            if (data && !data.shop_id && shopId) {
+                await this.updateAccountShopId(data.id, shopId);
+                data.shop_id = shopId;
+            }
             
             this.account = data;
             return data;
         } catch (error) {
             console.error('Get account error:', error);
             return null;
+        }
+    }
+    
+    async updateAccountShopId(accountId, shopId) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        try {
+            const { error } = await client
+                .from('coffee_club_accounts')
+                .update({ shop_id: shopId })
+                .eq('id', accountId);
+
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('Update account shop_id error:', error);
+            return { success: false, error: error.message };
         }
     }
 
@@ -64,12 +97,24 @@ class AccountManager {
             throw new Error('User not authenticated');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            throw new Error('Shop ID not configured');
+        }
+
         try {
+            // Ensure account has shop_id
+            const account = await this.getAccount();
+            if (account && !account.shop_id) {
+                await this.updateAccountShopId(account.id, shopId);
+            }
+
             // Create transaction record
             const { data, error } = await client
                 .from('account_transactions')
                 .insert({
                     account_id: user.id,
+                    shop_id: shopId,
                     type: 'deposit',
                     amount: amount,
                     description: `Account funding: $${amount.toFixed(2)}`,
@@ -101,11 +146,19 @@ class AccountManager {
             return [];
         }
 
+        const shopId = configManager.getShopId();
+
         try {
-            const { data, error } = await client
+            let query = client
                 .from('account_transactions')
                 .select('*')
-                .eq('account_id', user.id)
+                .eq('account_id', user.id);
+            
+            if (shopId) {
+                query = query.eq('shop_id', shopId);
+            }
+            
+            const { data, error } = await query
                 .order('created_at', { ascending: false })
                 .limit(limit);
 

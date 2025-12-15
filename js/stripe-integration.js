@@ -47,6 +47,7 @@ class StripeManager {
 
                 // Get user email for receipt
                 const user = await authManager.getCurrentUser();
+                const shopId = configManager.getShopId();
                 
                 // Try calling Supabase Edge Function
                 const response = await fetch(
@@ -61,6 +62,7 @@ class StripeManager {
                         body: JSON.stringify({
                             amount: amount,
                             accountId: accountId,
+                            shopId: shopId,
                             currency: 'usd', // Required: ISO currency code
                             description: `Coffee Club account funding: $${amount.toFixed(2)}`,
                             receiptEmail: user?.email || undefined // Recommended: email for receipt

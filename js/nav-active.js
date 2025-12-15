@@ -17,12 +17,11 @@
         // Find all nav links
         const allNavLinks = document.querySelectorAll('.nav-links a');
         const adminLinks = document.querySelectorAll('.admin-nav-link a');
-        const devLinks = document.querySelectorAll('.dev-nav-link a');
         
-        // Regular nav links (excluding admin/dev)
+        // Regular nav links (excluding admin)
         const navLinks = Array.from(allNavLinks).filter(link => {
             const parent = link.closest('li');
-            return parent && !parent.classList.contains('admin-nav-link') && !parent.classList.contains('dev-nav-link');
+            return parent && !parent.classList.contains('admin-nav-link');
         });
         
         // Remove active class from all regular nav links
@@ -47,13 +46,6 @@
             adminLinks.forEach(link => link.classList.add('active'));
         } else {
             adminLinks.forEach(link => link.classList.remove('active'));
-        }
-        
-        // Handle Dev link
-        if (currentPage === 'dev.html') {
-            devLinks.forEach(link => link.classList.add('active'));
-        } else {
-            devLinks.forEach(link => link.classList.remove('active'));
         }
     }
     

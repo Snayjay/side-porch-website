@@ -16,6 +16,11 @@ window.COFFEE_CLUB_CONFIG.supabase = {
     anonKey: 'sb_publishable_r3GUlCNCgWRRFJZ4N5zOBw_G6K90fBW'  // Your Supabase anon/public key
 };
 
+// Set your shop_id here (UUID of your coffee shop from the coffee_shop table)
+// This identifies which coffee shop this frontend deployment belongs to
+// Get this value from the Dev tab after creating a coffee shop
+window.COFFEE_CLUB_CONFIG.shop_id = null;  // Replace with your shop_id UUID
+
 // Stripe publishable key can also be included here (it's safe to expose)
 // Or it can be loaded from the database after Supabase is initialized
 // window.COFFEE_CLUB_CONFIG.stripe = {

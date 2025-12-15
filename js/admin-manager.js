@@ -80,10 +80,16 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             const { data, error } = await client
                 .from('coffee_club_accounts')
                 .select('id, email, full_name, role, balance, created_at')
+                .eq('shop_id', shopId)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -104,11 +110,17 @@ class AdminManager {
             return { success: false, error: 'Unauthorized: Staff access required' };
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             const { data, error } = await client
                 .from('account_transactions')
                 .select('*')
                 .eq('account_id', userId)
+                .eq('shop_id', shopId)
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
@@ -135,12 +147,18 @@ class AdminManager {
             return { success: false, error: 'Invalid transaction type' };
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             // Create transaction record
             const { data: transaction, error: transError } = await client
                 .from('account_transactions')
                 .insert({
                     account_id: userId,
+                    shop_id: shopId,
                     type: transactionType,
                     amount: Math.abs(amount),
                     description: description || (transactionType === 'deposit' ? 'Staff adjustment: Added funds' : 'Staff adjustment: Removed funds')
@@ -210,12 +228,18 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             const { data, error } = await client
                 .from('menu_categories')
                 .insert({
                     name: categoryData.name,
                     type: categoryData.type,
+                    shop_id: shopId,
                     display_order: parseInt(categoryData.display_order || 0),
                     available: categoryData.available !== undefined ? categoryData.available : true
                 })
@@ -299,10 +323,16 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             let query = client
                 .from('menu_categories')
                 .select('*')
+                .eq('shop_id', shopId)
                 .order('type', { ascending: true })
                 .order('display_order', { ascending: true })
                 .order('name', { ascending: true });
@@ -335,11 +365,17 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             let query = client
                 .from('products')
                 .select('*')
                 .eq('category_id', categoryId)
+                .eq('shop_id', shopId)
                 .order('name', { ascending: true });
 
             if (!includeArchived) {
@@ -465,11 +501,17 @@ class AdminManager {
                 throw new Error('Category type is required. Please select a valid category.');
             }
 
+            const shopId = configManager.getShopId();
+            if (!shopId) {
+                return { success: false, error: 'Shop ID not configured' };
+            }
+
             const insertData = {
                 name: productData.name,
                 description: productData.description || null,
                 category: categoryType, // Required NOT NULL field
                 category_id: productData.category_id || null,
+                shop_id: shopId,
                 price: parseFloat(productData.price),
                 tax_rate: parseFloat(productData.tax_rate || 0.0825),
                 image_url: productData.image_url || null,
@@ -692,6 +734,11 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             let query = client
                 .from('products')
@@ -699,6 +746,7 @@ class AdminManager {
                     *,
                     menu_category:menu_categories(*)
                 `)
+                .eq('shop_id', shopId)
                 .order('category_id', { ascending: true })
                 .order('name', { ascending: true });
 
@@ -727,6 +775,11 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             const { data, error } = await client
                 .from('ingredients')
@@ -735,6 +788,7 @@ class AdminManager {
                     category: ingredientData.category,
                     unit_type: ingredientData.unit_type,
                     unit_cost: parseFloat(ingredientData.unit_cost || 0),
+                    shop_id: shopId,
                     available: ingredientData.available !== undefined ? ingredientData.available : true
                 })
                 .select()
@@ -834,10 +888,16 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             let query = client
                 .from('ingredients')
                 .select('*')
+                .eq('shop_id', shopId)
                 .order('category', { ascending: true })
                 .order('name', { ascending: true });
 
@@ -889,6 +949,11 @@ class AdminManager {
             throw new Error('Supabase not configured');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
         try {
             const { data, error } = await client
                 .from('drink_ingredients')
@@ -896,7 +961,8 @@ class AdminManager {
                     *,
                     ingredient:ingredients(*)
                 `)
-                .eq('product_id', productId);
+                .eq('product_id', productId)
+                .eq('shop_id', shopId);
 
             if (error) throw error;
             return { success: true, drinkIngredients: data || [] };
@@ -1018,9 +1084,15 @@ class AdminManager {
             const updates = [];
             const inserts = [];
 
+            const shopId = configManager.getShopId();
+            if (!shopId) {
+                return { success: false, error: 'Shop ID not configured' };
+            }
+
             for (const ing of uniqueIngredients) {
                 const ingredientData = {
                     product_id: productId,
+                    shop_id: shopId,
                     ingredient_id: ing.ingredient_id,
                     default_amount: parseFloat(ing.default_amount || 0),
                     is_required: ing.is_required || false,

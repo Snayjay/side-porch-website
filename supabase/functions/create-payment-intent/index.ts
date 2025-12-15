@@ -18,7 +18,7 @@ serve(async (req) => {
   }
 
   try {
-    const { amount, accountId, currency, description, receiptEmail } = await req.json()
+    const { amount, accountId, currency, description, receiptEmail, shopId } = await req.json()
 
     // Validate input
     if (!amount || amount <= 0) {
@@ -47,6 +47,7 @@ serve(async (req) => {
       statement_descriptor_suffix: "SIDE PORCH", // Suffix for what appears on customer's credit card statement (max 22 chars, appended to merchant name)
       metadata: {
         account_id: accountId,
+        shop_id: shopId || null,
         funding_amount: amount.toString(),
         type: "account_funding"
       },

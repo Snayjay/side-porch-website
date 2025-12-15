@@ -14,7 +14,8 @@ class ConfigManager {
             },
             openai: {
                 apiKey: null
-            }
+            },
+            shop_id: null
         };
         this.loaded = false;
         
@@ -71,6 +72,9 @@ class ConfigManager {
             if (localConfig.openai?.apiKey) {
                 this.config.openai.apiKey = localConfig.openai.apiKey;
             }
+            if (localConfig.shop_id) {
+                this.config.shop_id = localConfig.shop_id;
+            }
             // Save to localStorage as backup
             this.saveToStorage();
             
@@ -108,6 +112,9 @@ class ConfigManager {
             if (publicConfig.openai?.apiKey && 
                 publicConfig.openai.apiKey !== 'YOUR_OPENAI_API_KEY_HERE') {
                 this.config.openai.apiKey = publicConfig.openai.apiKey;
+            }
+            if (publicConfig.shop_id) {
+                this.config.shop_id = publicConfig.shop_id;
             }
             // Save to localStorage as backup
             if (this.loaded) {
@@ -224,6 +231,9 @@ class ConfigManager {
                 if (parsed.stripe?.publishableKey) {
                     this.config.stripe.publishableKey = parsed.stripe.publishableKey;
                 }
+                if (parsed.shop_id) {
+                    this.config.shop_id = parsed.shop_id;
+                }
                 if (configLoaded && this.isSupabaseConfigured()) {
                     this.loaded = true;
                     // Initialize Supabase if config is valid
@@ -336,6 +346,15 @@ class ConfigManager {
     isStripeConfigured() {
         const config = this.isConfigured();
         return config.stripe;
+    }
+    
+    getShopId() {
+        return this.config.shop_id;
+    }
+    
+    setShopId(shopId) {
+        this.config.shop_id = shopId;
+        this.saveToStorage();
     }
 }
 

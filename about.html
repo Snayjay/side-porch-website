@@ -19,7 +19,6 @@
                 <li><a href="contact.html">Contact</a></li>
                 <li><a href="login.html">Login</a></li>
                 <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
-                <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
             </ul>
         </nav>
     </header>
@@ -98,20 +97,10 @@
     <script src="js/auth.js"></script>
     <script src="js/account-manager.js"></script>
     <script src="js/admin-manager.js"></script>
-    <script src="js/dev-manager.js"></script>
     <script src="js/nav-active.js"></script>
     <script src="js/nav-login-logout.js"></script>
     <script src="js/nav-admin-link.js"></script>
     <script>
-        // Check module access and redirect if disabled
-        window.addEventListener('supabaseReady', async () => {
-            if (typeof devManager !== 'undefined') {
-                await authManager.getCurrentUser();
-                const hasAccess = await devManager.checkModuleAccess('about');
-                if (!hasAccess) return; // Redirected
-            }
-        });
-        
         window.addEventListener('supabaseReady', async () => {
             if (typeof adminManager !== 'undefined') {
                 await authManager.getCurrentUser();
@@ -120,38 +109,15 @@
                     link.style.display = isStaff ? '' : 'none';
                 });
             }
-            if (typeof devManager !== 'undefined') {
-                await authManager.getCurrentUser();
-                const isDev = await devManager.isDeveloper();
-                document.querySelectorAll('.dev-nav-link').forEach(link => {
-                    link.style.display = isDev ? '' : 'none';
-                });
-                await devManager.updateNavigationVisibility();
-                await devManager.updateFooterSocialLinks();
-            }
         });
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', async () => {
-                if (typeof devManager !== 'undefined' && configManager.isSupabaseConfigured()) {
-                    await authManager.getCurrentUser();
-                    const hasAccess = await devManager.checkModuleAccess('about');
-                    if (!hasAccess) return; // Redirected
-                }
                 if (typeof adminManager !== 'undefined' && configManager.isSupabaseConfigured()) {
                     await authManager.getCurrentUser();
                     const isStaff = await adminManager.isStaff();
                     document.querySelectorAll('.admin-nav-link').forEach(link => {
                         link.style.display = isStaff ? '' : 'none';
                     });
-                }
-                if (typeof devManager !== 'undefined' && configManager.isSupabaseConfigured()) {
-                    await authManager.getCurrentUser();
-                    const isDev = await devManager.isDeveloper();
-                    document.querySelectorAll('.dev-nav-link').forEach(link => {
-                        link.style.display = isDev ? '' : 'none';
-                    });
-                    await devManager.updateNavigationVisibility();
-                    await devManager.updateFooterSocialLinks();
                 }
             });
         }

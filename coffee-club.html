@@ -20,7 +20,6 @@
                 <li><a href="contact.html">Contact</a></li>
                 <li><a href="login.html">Login</a></li>
                 <li class="admin-nav-link" style="display: none;"><a href="admin.html">Staff</a></li>
-                <li class="dev-nav-link" style="display: none;"><a href="dev.html">Dev</a></li>
             </ul>
         </nav>
     </header>
@@ -130,49 +129,12 @@
     <script src="js/order-processor.js"></script>
     <script src="js/coffee-club-menu.js"></script>
     <script src="js/coffee-club-app.js"></script>
-    <script src="js/dev-manager.js"></script>
     <script src="js/nav-active.js"></script>
     <script src="js/nav-login-logout.js"></script>
     <script src="js/nav-admin-link.js"></script>
     <script>
-        // Check module access and redirect if disabled
-        window.addEventListener('supabaseReady', async () => {
-            if (typeof devManager !== 'undefined') {
-                await authManager.getCurrentUser();
-                const hasAccess = await devManager.checkModuleAccess('coffee_club');
-                if (!hasAccess) return; // Redirected
-            }
-        });
-        
-        // Update admin and dev link visibility on page load
+        // Update admin link visibility on page load
         async function updateLinkVisibility() {
-            // Check dev access first (doesn't require database)
-            if (typeof devManager !== 'undefined') {
-                try {
-                    const user = await authManager.getCurrentUser();
-                    if (!user) {
-                        console.log('No user found, hiding dev link');
-                        document.querySelectorAll('.dev-nav-link').forEach(link => {
-                            link.style.display = 'none';
-                        });
-                    } else {
-                        const isDev = await devManager.isDeveloper();
-                        console.log('Dev link check result:', isDev, 'User email:', user.email);
-                        const devLinks = document.querySelectorAll('.dev-nav-link');
-                        console.log('Found dev links:', devLinks.length);
-                        devLinks.forEach(link => {
-                            link.style.display = isDev ? 'list-item' : 'none';
-                            console.log('Set dev link display to:', isDev ? 'list-item' : 'none', link);
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error checking dev access:', error);
-                    document.querySelectorAll('.dev-nav-link').forEach(link => {
-                        link.style.display = 'none';
-                    });
-                }
-            }
-            
             // Check admin access
             if (typeof adminManager !== 'undefined') {
                 try {
@@ -182,20 +144,6 @@
                     }
                 } catch (error) {
                     console.error('Error checking admin access:', error);
-                }
-            }
-            
-            // Update navigation and footer (these may fail due to database issues, but that's OK)
-            if (typeof devManager !== 'undefined') {
-                try {
-                    await devManager.updateNavigationVisibility();
-                } catch (error) {
-                    console.warn('Error updating navigation visibility:', error);
-                }
-                try {
-                    await devManager.updateFooterSocialLinks();
-                } catch (error) {
-                    console.warn('Error updating footer social links:', error);
                 }
             }
         }

@@ -169,6 +169,24 @@ class DrinkCustomizer {
             this.renderCustomizationContent();
         });
 
+        // Use event delegation for quantity buttons
+        const content = modal.querySelector('#customization-content');
+        if (content) {
+            content.addEventListener('click', (e) => {
+                const button = e.target.closest('.qty-btn');
+                if (button) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const ingredientId = button.dataset.ingredientId;
+                    const delta = parseInt(button.dataset.delta) || 0;
+                    if (ingredientId && delta !== 0) {
+                        console.log(`Adjusting ingredient ${ingredientId} by ${delta}`);
+                        this.adjustIngredient(ingredientId, delta);
+                    }
+                }
+            });
+        }
+
         // Close on overlay click
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
@@ -191,21 +209,28 @@ class DrinkCustomizer {
         const content = this.modal.querySelector('#customization-content');
         if (!content) return;
 
-        // Initialize customizations with default amounts from recipe
-        // First, initialize all recipe ingredients with their default amounts
-        Object.keys(this.drinkIngredients).forEach(ingredientId => {
-            const drinkIng = this.drinkIngredients[ingredientId];
-            if (drinkIng && drinkIng.defaultAmount > 0) {
-                this.customizations[ingredientId] = drinkIng.defaultAmount;
-            }
-        });
+        // Only initialize customizations if they haven't been initialized yet
+        // This preserves user changes when re-rendering
+        const isFirstRender = Object.keys(this.customizations).length === 0;
         
-        // Then initialize other ingredients to 0
-        this.ingredients.forEach(ingredient => {
-            if (!(ingredient.id in this.customizations)) {
-                this.customizations[ingredient.id] = 0;
-            }
-        });
+        if (isFirstRender) {
+            // Initialize customizations with default amounts from recipe
+            // First, initialize all recipe ingredients with their default amounts (including 0)
+            Object.keys(this.drinkIngredients).forEach(ingredientId => {
+                const drinkIng = this.drinkIngredients[ingredientId];
+                if (drinkIng) {
+                    // Initialize with default amount (could be 0)
+                    this.customizations[ingredientId] = drinkIng.defaultAmount || 0;
+                }
+            });
+            
+            // Then initialize other ingredients (not in recipe) to 0
+            this.ingredients.forEach(ingredient => {
+                if (!(ingredient.id in this.customizations)) {
+                    this.customizations[ingredient.id] = 0;
+                }
+            });
+        }
 
         let html = '';
 
@@ -224,7 +249,7 @@ class DrinkCustomizer {
 
     renderRecipeSection() {
         // Get ingredients that are in the original recipe (drink_ingredients)
-        // Iterate over drinkIngredients to ensure we show all recipe ingredients
+        // Only show ingredients that are in the original recipe (defaultAmount > 0) AND current amount > 0
         console.log('renderRecipeSection - drinkIngredients:', this.drinkIngredients);
         console.log('renderRecipeSection - available ingredients:', this.ingredients.length);
         
@@ -234,16 +259,20 @@ class DrinkCustomizer {
             const drinkIng = this.drinkIngredients[ingredientId];
             console.log(`Processing ingredient ${ingredientId}:`, drinkIng);
             if (drinkIng && drinkIng.defaultAmount > 0) {
-                // Use the joined ingredient data if available, otherwise find it in this.ingredients
-                const ingredient = drinkIng.ingredient || this.ingredients.find(i => i.id === ingredientId);
-                console.log(`Found ingredient for ${ingredientId}:`, ingredient);
-                if (ingredient) {
-                    recipeIngredients.push({
-                        ...ingredient,
-                        drinkIng: drinkIng
-                    });
-                } else {
-                    console.warn(`Ingredient ${ingredientId} not found in available ingredients or joined data`);
+                const currentAmount = this.customizations[ingredientId] || 0;
+                // Only show if current amount > 0 (if decreased to 0, remove from display)
+                if (currentAmount > 0) {
+                    // Use the joined ingredient data if available, otherwise find it in this.ingredients
+                    const ingredient = drinkIng.ingredient || this.ingredients.find(i => i.id === ingredientId);
+                    console.log(`Found ingredient for ${ingredientId}:`, ingredient);
+                    if (ingredient) {
+                        recipeIngredients.push({
+                            ...ingredient,
+                            drinkIng: drinkIng
+                        });
+                    } else {
+                        console.warn(`Ingredient ${ingredientId} not found in available ingredients or joined data`);
+                    }
                 }
             }
         });
@@ -309,13 +338,13 @@ class DrinkCustomizer {
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
                             ${canDecrease ? `
-                                <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', -1)" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
+                                <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="-1" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
                             ` : '<div style="width: 30px;"></div>'}
                             <div style="min-width: 80px; text-align: center; font-weight: 600; color: var(--deep-brown);">
                                 <span style="font-size: 1.1rem;">${currentAmount}</span>
                                 <span style="font-size: 0.85rem; opacity: 0.7; margin-left: 0.25rem;">${this.getUnitDisplay(ingredient.unit_type, currentAmount)}</span>
                             </div>
-                            <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', 1)" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
+                            <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="1" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
                         </div>
                     </div>
                 `;
@@ -389,10 +418,10 @@ class DrinkCustomizer {
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
                             ${currentAmount > 0 ? `
-                                <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', -1)" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
+                                <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="-1" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
                             ` : '<div style="width: 30px;"></div>'}
                             <span style="min-width: 40px; text-align: center; font-weight: 600; color: var(--deep-brown);">${currentAmount > 0 ? currentAmount : '0'}</span>
-                            <button class="qty-btn" onclick="drinkCustomizer.adjustIngredient('${ingredient.id}', 1)" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
+                            <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="1" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
                         </div>
                     </div>
                 `;
@@ -415,18 +444,22 @@ class DrinkCustomizer {
                 ingredient = drinkIng.ingredient;
             }
         }
-        if (!ingredient) return;
+        if (!ingredient) {
+            console.warn(`Ingredient ${ingredientId} not found`);
+            return;
+        }
 
-        const drinkIng = this.drinkIngredients[ingredientId];
         const currentAmount = this.customizations[ingredientId] || 0;
         const newAmount = Math.max(0, currentAmount + delta);
 
-        // Handle recipe ingredients (those in drink_ingredients)
-        // Allow full control - users can increase or decrease any ingredient to any amount
-        // No restrictions - users can customize the recipe completely
-        // The only restriction is that we can't go below 0 (handled by Math.max above)
+        console.log(`Ingredient ${ingredientId}: ${currentAmount} -> ${newAmount}`);
 
+        // Update the customization amount
+        // If newAmount is 0, the ingredient will be removed from the displayed recipe
+        // but the original recipe (drinkIngredients) is never changed
         this.customizations[ingredientId] = newAmount;
+        
+        // Re-render to update the UI and move ingredients between sections as needed
         this.renderCustomizationContent();
     }
 

@@ -45,6 +45,14 @@ class CoffeeClubMenu {
         
         this.productsLoaded = true;
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            console.error('Shop ID not configured - cannot load products');
+            this.products = [];
+            this.renderMenu();
+            return;
+        }
+
         try {
             // Load products with their categories
             const { data, error } = await client
@@ -58,6 +66,7 @@ class CoffeeClubMenu {
                     )
                 `)
                 .eq('available', true)
+                .eq('shop_id', shopId)
                 .order('name', { ascending: true });
 
             if (error) throw error;
