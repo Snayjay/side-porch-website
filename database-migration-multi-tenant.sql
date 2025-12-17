@@ -6,9 +6,9 @@
 -- After running this, you should update your config files with the shop_id
 
 -- Step 1: Create default coffee shop (Side Porch Coffee Co.)
-INSERT INTO coffee_shop (id, code, name, domain, created_at, updated_at)
+-- Note: shop_id is now a 4-digit text code, not UUID
+INSERT INTO coffee_shop (id, name, domain, created_at, updated_at)
 VALUES (
-    '00000000-0000-0000-0000-000000000001'::uuid,
     '0001',
     'Side Porch Coffee Co.',
     NULL,
@@ -20,7 +20,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Store the default shop ID for use in updates
 DO $$
 DECLARE
-    default_shop_id UUID := '00000000-0000-0000-0000-000000000001'::uuid;
+    default_shop_id TEXT := '0001';
 BEGIN
     -- Step 2: Update all existing records with default shop_id
     -- Note: We're using a fixed UUID so it's consistent across runs

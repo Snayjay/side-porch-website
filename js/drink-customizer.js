@@ -5,6 +5,8 @@ class DrinkCustomizer {
     constructor() {
         this.ingredients = [];
         this.drinkIngredients = {}; // Map of product_id to default ingredients
+        this.productSizes = []; // Store sizes for current product
+        this.selectedSize = null; // Currently selected size
         this.loadIngredients();
     }
 
@@ -16,11 +18,19 @@ class DrinkCustomizer {
             return;
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            console.warn('Shop ID not configured - using mock ingredients');
+            this.ingredients = this.getMockIngredients();
+            return;
+        }
+
         try {
             const { data, error } = await client
                 .from('ingredients')
                 .select('*')
                 .eq('available', true)
+                .eq('shop_id', shopId)
                 .order('category', { ascending: true })
                 .order('name', { ascending: true });
 
@@ -74,9 +84,12 @@ class DrinkCustomizer {
             (data || []).forEach(di => {
                 ingredientsMap[di.ingredient_id] = {
                     defaultAmount: parseFloat(di.default_amount),
+                    // Use recipe's unit_type if set, otherwise fall back to ingredient's default
+                    unitType: di.unit_type || di.ingredient?.unit_type,
                     isRequired: di.is_required,
                     isRemovable: di.is_removable,
                     isAddable: di.is_addable,
+                    useDefaultPrice: di.use_default_price !== undefined ? di.use_default_price : true, // Default to true for backward compatibility
                     ingredient: di.ingredient
                 };
             });
@@ -86,6 +99,35 @@ class DrinkCustomizer {
         } catch (error) {
             console.error('Load drink ingredients error:', error);
             return {};
+        }
+    }
+
+    async loadProductSizes(productId) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return [];
+        }
+
+        try {
+            const shopId = configManager.getShopId();
+            if (!shopId) {
+                return [];
+            }
+
+            const { data, error } = await client
+                .from('product_sizes')
+                .select('*')
+                .eq('product_id', productId)
+                .eq('shop_id', shopId)
+                .eq('available', true)
+                .order('display_order', { ascending: true })
+                .order('size_name', { ascending: true });
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Load product sizes error:', error);
+            return [];
         }
     }
 
@@ -139,6 +181,9 @@ class DrinkCustomizer {
                 </div>
                 <p style="margin: 0.5rem 0 0 0; color: var(--text-dark); opacity: 0.8; font-size: 0.9rem;">${product.description || ''}</p>
             </div>
+            <div id="customization-size-selector" style="padding: 0 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2); flex-shrink: 0; display: none;">
+                <!-- Size selector will be rendered here -->
+            </div>
             <div id="customization-content" style="padding: 1.5rem; overflow-y: auto; flex: 1;">
                 <p style="text-align: center; color: var(--text-dark); opacity: 0.7;">Loading ingredients...</p>
             </div>
@@ -148,7 +193,7 @@ class DrinkCustomizer {
                         Total: $<span id="customization-total">${this.basePrice.toFixed(2)}</span>
                     </div>
                     <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.25rem;">
-                        Base: $${this.basePrice.toFixed(2)}
+                        Base: $<span id="customization-base-price">${this.basePrice.toFixed(2)}</span>
                     </div>
                 </div>
                 <div style="display: flex; gap: 1rem;">
@@ -162,10 +207,26 @@ class DrinkCustomizer {
         document.body.appendChild(overlay);
         this.modal = overlay;
 
-        // Load drink ingredients and render
-        this.loadDrinkIngredients(product.id).then(drinkIngredients => {
+        // Load ingredients, sizes, and drink recipe, then render
+        // Reload ingredients to ensure we have fresh data with the correct shop_id
+        this.loadIngredients().then(() => {
+            console.log('Loaded ingredients:', this.ingredients.length);
+            return Promise.all([
+                this.loadDrinkIngredients(product.id),
+                this.loadProductSizes(product.id)
+            ]);
+        }).then(([drinkIngredients, sizes]) => {
             console.log('Setting drinkIngredients:', drinkIngredients);
+            console.log('Setting productSizes:', sizes);
             this.drinkIngredients = drinkIngredients;
+            this.productSizes = sizes || [];
+            this.selectedSize = null; // Reset selected size
+            
+            // Ensure product has size fields (in case they weren't loaded)
+            if (this.currentProduct.has_sizes === undefined) {
+                this.currentProduct.has_sizes = this.productSizes.length > 0;
+            }
+            
             this.renderCustomizationContent();
         });
 
@@ -209,6 +270,9 @@ class DrinkCustomizer {
         const content = this.modal.querySelector('#customization-content');
         if (!content) return;
 
+        // Render size selector first (if product has sizes)
+        this.renderSizeSelector();
+
         // Only initialize customizations if they haven't been initialized yet
         // This preserves user changes when re-rendering
         const isFirstRender = Object.keys(this.customizations).length === 0;
@@ -248,13 +312,14 @@ class DrinkCustomizer {
     }
 
     renderRecipeSection() {
-        // Get ingredients that are in the original recipe (drink_ingredients)
-        // Only show ingredients that are in the original recipe (defaultAmount > 0) AND current amount > 0
+        // This section shows ALL ingredients currently in this customized order (qty > 0)
+        // This includes: original recipe ingredients AND any additional ingredients added by user
         console.log('renderRecipeSection - drinkIngredients:', this.drinkIngredients);
         console.log('renderRecipeSection - available ingredients:', this.ingredients.length);
         
         const recipeIngredients = [];
         
+        // First, add original recipe ingredients with qty > 0
         Object.keys(this.drinkIngredients).forEach(ingredientId => {
             const drinkIng = this.drinkIngredients[ingredientId];
             console.log(`Processing ingredient ${ingredientId}:`, drinkIng);
@@ -268,7 +333,8 @@ class DrinkCustomizer {
                     if (ingredient) {
                         recipeIngredients.push({
                             ...ingredient,
-                            drinkIng: drinkIng
+                            drinkIng: drinkIng,
+                            isAddedIngredient: false
                         });
                     } else {
                         console.warn(`Ingredient ${ingredientId} not found in available ingredients or joined data`);
@@ -277,24 +343,40 @@ class DrinkCustomizer {
             }
         });
 
+        // Then, add any additional ingredients that have qty > 0 (user added them)
+        this.ingredients.forEach(ingredient => {
+            const drinkIng = this.drinkIngredients[ingredient.id];
+            // Skip if it's already in the original recipe (already processed above)
+            if (drinkIng && drinkIng.defaultAmount > 0) return;
+            
+            const currentAmount = this.customizations[ingredient.id] || 0;
+            if (currentAmount > 0) {
+                recipeIngredients.push({
+                    ...ingredient,
+                    drinkIng: drinkIng || null,
+                    isAddedIngredient: true
+                });
+            }
+        });
+
         console.log('Recipe ingredients to render:', recipeIngredients.length, recipeIngredients);
 
         if (recipeIngredients.length === 0) {
-            return '<div style="margin-bottom: 2rem;"><h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.1rem;">Recipe Ingredients</h3><p style="color: var(--text-dark); opacity: 0.7; font-style: italic;">No recipe ingredients configured for this drink.</p></div>';
+            return '<div style="margin-bottom: 2rem;"><h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.1rem;">🧾 Your Custom Recipe</h3><p style="color: var(--text-dark); opacity: 0.7; font-style: italic;">No ingredients in this order yet. Add some below!</p></div>';
         }
 
-        // Group recipe ingredients by category
-        const categories = {
-            base_drinks: { name: '☕ Base Drinks', ingredients: [] },
-            sugars: { name: '🍬 Sugars', ingredients: [] },
-            liquid_creamers: { name: '🥛 Liquid Creamers', ingredients: [] },
-            toppings: { name: '✨ Toppings', ingredients: [] },
-            add_ins: { name: '➕ Add-ins', ingredients: [] }
-        };
-
+        // Group recipe ingredients by category - build categories dynamically from actual ingredient data
+        const categories = {};
+        
         recipeIngredients.forEach(ingredient => {
-            const category = categories[ingredient.category] || categories.add_ins;
-            category.ingredients.push(ingredient);
+            const catKey = ingredient.category || 'other';
+            if (!categories[catKey]) {
+                categories[catKey] = {
+                    name: this.getCategoryDisplayName(catKey),
+                    ingredients: []
+                };
+            }
+            categories[catKey].ingredients.push(ingredient);
         });
         
         // Sort ingredients within each category alphabetically
@@ -306,11 +388,14 @@ class DrinkCustomizer {
             });
         });
 
-        let html = '<div style="margin-bottom: 2rem;">';
-        html += '<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">Recipe Ingredients</h3>';
-        html += '<p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem; margin-bottom: 1rem;">Adjust the original recipe ingredients:</p>';
+        // Sort categories in a logical order
+        const sortedCategories = this.sortCategories(categories);
 
-        Object.values(categories).forEach(category => {
+        let html = '<div style="margin-bottom: 2rem;">';
+        html += '<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">🧾 Your Custom Recipe</h3>';
+        html += '<p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem; margin-bottom: 1rem;">All ingredients in your customized drink:</p>';
+
+        sortedCategories.forEach(category => {
             if (category.ingredients.length === 0) return;
 
             html += `<div style="margin-bottom: 1.5rem;">`;
@@ -319,21 +404,30 @@ class DrinkCustomizer {
             category.ingredients.forEach(ingredient => {
                 const drinkIng = ingredient.drinkIng || this.drinkIngredients[ingredient.id];
                 const currentAmount = this.customizations[ingredient.id] || 0;
-                const unitLabel = this.getUnitLabel(ingredient.unit_type);
-                const cost = parseFloat(ingredient.unit_cost || 0) * currentAmount;
+                // Use recipe's unit type if available, otherwise fall back to ingredient's default
+                const effectiveUnitType = drinkIng?.unitType || ingredient.unit_type;
+                const unitLabel = this.getUnitLabel(effectiveUnitType);
+                // Only calculate cost if useDefaultPrice is true
+                // Check explicitly for false - if null/undefined, default to true for backward compatibility
+                const useDefaultPrice = drinkIng?.useDefaultPrice === false ? false : true;
+                const cost = useDefaultPrice ? (parseFloat(ingredient.unit_cost || 0) * currentAmount) : 0;
+                const isAdded = ingredient.isAddedIngredient;
                 
                 // Allow decreasing any ingredient if it has a quantity > 0
                 const canDecrease = currentAmount > 0;
+                
+                // Show a badge for added ingredients
+                const addedBadge = isAdded ? '<span style="background: var(--accent-orange); color: white; font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 10px; margin-left: 0.5rem;">ADDED</span>' : '';
 
                 html += `
-                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--parchment); border-radius: 8px; margin-bottom: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3);">
+                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: ${isAdded ? 'linear-gradient(135deg, var(--parchment) 0%, rgba(255, 165, 0, 0.1) 100%)' : 'var(--parchment)'}; border-radius: 8px; margin-bottom: 0.5rem; border: 2px solid ${isAdded ? 'var(--accent-orange)' : 'rgba(139, 111, 71, 0.3)'};">
                         <div style="flex: 1;">
                             <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">
-                                ${ingredient.name}
+                                ${ingredient.name}${addedBadge}
                             </div>
                             <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">
-                                ${unitLabel} • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(ingredient.unit_type)}
-                                ${cost > 0 ? ` • $${cost.toFixed(2)}` : ''}
+                                ${unitLabel}${useDefaultPrice ? ` • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(effectiveUnitType)}` : ''}
+                                ${useDefaultPrice && cost > 0 ? ` • $${cost.toFixed(2)}` : ''}
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -342,7 +436,7 @@ class DrinkCustomizer {
                             ` : '<div style="width: 30px;"></div>'}
                             <div style="min-width: 80px; text-align: center; font-weight: 600; color: var(--deep-brown);">
                                 <span style="font-size: 1.1rem;">${currentAmount}</span>
-                                <span style="font-size: 0.85rem; opacity: 0.7; margin-left: 0.25rem;">${this.getUnitDisplay(ingredient.unit_type, currentAmount)}</span>
+                                <span style="font-size: 0.85rem; opacity: 0.7; margin-left: 0.25rem;">${this.getUnitDisplay(effectiveUnitType, currentAmount)}</span>
                             </div>
                             <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="1" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
                         </div>
@@ -358,27 +452,40 @@ class DrinkCustomizer {
     }
 
     renderAdditionalIngredientsSection() {
-        // Get ingredients that are NOT in the original recipe
-        const additionalIngredients = this.ingredients.filter(ingredient => 
-            !this.drinkIngredients[ingredient.id] || this.drinkIngredients[ingredient.id].defaultAmount === 0
-        );
+        // Get ingredients that are NOT currently in the recipe (qty == 0)
+        // This includes: ingredients not in original recipe, AND original recipe items reduced to 0
+        const additionalIngredients = this.ingredients.filter(ingredient => {
+            const drinkIng = this.drinkIngredients[ingredient.id];
+            const currentAmount = this.customizations[ingredient.id] || 0;
+            
+            // Show in this section if:
+            // 1. Not in original recipe and quantity is 0, OR
+            // 2. Was in original recipe but has been reduced to 0
+            if (currentAmount > 0) {
+                // If qty > 0, it's in the recipe section, not here
+                return false;
+            }
+            
+            // Show it here if qty is 0
+            return true;
+        });
 
         if (additionalIngredients.length === 0) {
-            return '';
+            return '<div style="margin-bottom: 2rem;"><h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">🛒 Add Ingredients</h3><p style="color: var(--text-dark); opacity: 0.7; font-style: italic;">All available ingredients have been added to your recipe!</p></div>';
         }
 
-        // Group additional ingredients by category
-        const categories = {
-            base_drinks: { name: '☕ Base Drinks', ingredients: [] },
-            sugars: { name: '🍬 Sugars', ingredients: [] },
-            liquid_creamers: { name: '🥛 Liquid Creamers', ingredients: [] },
-            toppings: { name: '✨ Toppings', ingredients: [] },
-            add_ins: { name: '➕ Add-ins', ingredients: [] }
-        };
-
+        // Group additional ingredients by category - build categories dynamically from actual ingredient data
+        const categories = {};
+        
         additionalIngredients.forEach(ingredient => {
-            const category = categories[ingredient.category] || categories.add_ins;
-            category.ingredients.push(ingredient);
+            const catKey = ingredient.category || 'other';
+            if (!categories[catKey]) {
+                categories[catKey] = {
+                    name: this.getCategoryDisplayName(catKey),
+                    ingredients: []
+                };
+            }
+            categories[catKey].ingredients.push(ingredient);
         });
         
         // Sort ingredients within each category alphabetically
@@ -390,37 +497,40 @@ class DrinkCustomizer {
             });
         });
 
-        let html = '<div style="margin-bottom: 2rem;">';
-        html += '<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">Add More Ingredients</h3>';
-        html += '<p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem; margin-bottom: 1rem;">Add additional ingredients to customize your drink:</p>';
+        // Sort categories in a logical order
+        const sortedCategories = this.sortCategories(categories);
 
-        Object.values(categories).forEach(category => {
+        let html = '<div style="margin-bottom: 2rem;">';
+        html += '<h3 style="color: var(--deep-brown); margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600;">🛒 Add Ingredients</h3>';
+        html += '<p style="color: var(--text-dark); opacity: 0.7; font-size: 0.9rem; margin-bottom: 1rem;">Tap + to add ingredients to your custom recipe:</p>';
+
+        sortedCategories.forEach(category => {
             if (category.ingredients.length === 0) return;
 
             html += `<div style="margin-bottom: 1.5rem;">`;
             html += `<h4 style="color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 1rem; font-weight: 600;">${category.name}</h4>`;
 
             category.ingredients.forEach(ingredient => {
-                const currentAmount = this.customizations[ingredient.id] || 0;
-                const unitLabel = this.getUnitLabel(ingredient.unit_type);
-                const cost = parseFloat(ingredient.unit_cost) * currentAmount;
+                const drinkIng = this.drinkIngredients[ingredient.id];
+                // Use recipe's unit type if available, otherwise fall back to ingredient's default
+                const effectiveUnitType = drinkIng?.unitType || ingredient.unit_type;
+                const unitLabel = this.getUnitLabel(effectiveUnitType);
+                const wasInRecipe = drinkIng && drinkIng.defaultAmount > 0;
+                
+                // Show a subtle indicator if this was removed from original recipe
+                const removedIndicator = wasInRecipe ? '<span style="background: rgba(139, 111, 71, 0.2); color: var(--deep-brown); font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 10px; margin-left: 0.5rem;">REMOVED</span>' : '';
 
                 html += `
-                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--cream); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(139, 111, 71, 0.2);">
+                    <div class="customization-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--cream); border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(139, 111, 71, 0.2); ${wasInRecipe ? 'opacity: 0.7;' : ''}">
                         <div style="flex: 1;">
                             <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.25rem;">
-                                ${ingredient.name}
+                                ${ingredient.name}${removedIndicator}
                             </div>
                             <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">
-                                ${unitLabel} • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(ingredient.unit_type)}
-                                ${cost > 0 ? ` • $${cost.toFixed(2)}` : ''}
+                                ${unitLabel} • $${ingredient.unit_cost.toFixed(2)}/${this.getUnitAbbreviation(effectiveUnitType)}
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            ${currentAmount > 0 ? `
-                                <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="-1" style="background: var(--cream); border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: var(--deep-brown); transition: all 0.3s ease;">-</button>
-                            ` : '<div style="width: 30px;"></div>'}
-                            <span style="min-width: 40px; text-align: center; font-weight: 600; color: var(--deep-brown);">${currentAmount > 0 ? currentAmount : '0'}</span>
                             <button type="button" class="qty-btn" data-ingredient-id="${ingredient.id}" data-delta="1" style="background: var(--accent-orange); border: 2px solid var(--accent-orange); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.3s ease;">+</button>
                         </div>
                     </div>
@@ -463,27 +573,121 @@ class DrinkCustomizer {
         this.renderCustomizationContent();
     }
 
+    renderSizeSelector() {
+        const sizeSelector = this.modal.querySelector('#customization-size-selector');
+        if (!sizeSelector) return;
+
+        // Check if product has sizes - check both has_sizes flag and actual sizes array
+        const hasSizesFlag = this.currentProduct.has_sizes === true;
+        const hasSizes = (hasSizesFlag || this.productSizes.length > 0) && this.productSizes.length > 0;
+        const fixedSizeOz = this.currentProduct.fixed_size_oz;
+
+        if (hasSizes) {
+            // Show size selector
+            sizeSelector.style.display = 'block';
+            
+            let html = '<div style="padding: 1rem 0;">';
+            html += '<h3 style="color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 1.1rem; font-weight: 600;">Select Size</h3>';
+            html += '<div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">';
+            
+            this.productSizes.forEach((size, index) => {
+                const isSelected = this.selectedSize && this.selectedSize.size_name === size.size_name;
+                html += `
+                    <button type="button" 
+                            class="size-option-btn" 
+                            data-size-name="${size.size_name}"
+                            data-size-price="${size.price}"
+                            onclick="drinkCustomizer.selectSize('${size.size_name}', ${size.price})"
+                            style="
+                                flex: 1;
+                                min-width: 120px;
+                                padding: 0.75rem;
+                                background: ${isSelected ? 'var(--accent-orange)' : 'var(--cream)'};
+                                color: ${isSelected ? 'white' : 'var(--deep-brown)'};
+                                border: 2px solid ${isSelected ? 'var(--accent-orange)' : 'rgba(139, 111, 71, 0.3)'};
+                                border-radius: 8px;
+                                cursor: pointer;
+                                font-weight: ${isSelected ? '600' : '500'};
+                                transition: all 0.3s ease;
+                            ">
+                        <div style="font-size: 1rem; margin-bottom: 0.25rem;">${size.size_name}</div>
+                        <div style="font-size: 0.85rem; opacity: 0.9;">${size.size_oz} oz</div>
+                        <div style="font-size: 0.9rem; margin-top: 0.25rem;">$${parseFloat(size.price).toFixed(2)}</div>
+                    </button>
+                `;
+            });
+            
+            html += '</div></div>';
+            sizeSelector.innerHTML = html;
+            
+            // Select first size by default if none selected
+            if (!this.selectedSize && this.productSizes.length > 0) {
+                this.selectSize(this.productSizes[0].size_name, this.productSizes[0].price);
+            }
+        } else if (fixedSizeOz) {
+            // Show fixed size display
+            sizeSelector.style.display = 'block';
+            sizeSelector.innerHTML = `
+                <div style="padding: 1rem 0;">
+                    <div style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.8;">
+                        Size: <strong>${fixedSizeOz} oz</strong>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Hide size selector
+            sizeSelector.style.display = 'none';
+        }
+    }
+
+    selectSize(sizeName, sizePrice) {
+        const size = this.productSizes.find(s => s.size_name === sizeName);
+        if (!size) return;
+        
+        this.selectedSize = size;
+        this.basePrice = parseFloat(sizePrice);
+        
+        // Update UI
+        this.renderSizeSelector();
+        this.updateTotal();
+    }
+
     updateTotal() {
-        let total = this.basePrice;
+        let total = this.basePrice || parseFloat(this.currentProduct.price || 0);
 
         this.ingredients.forEach(ingredient => {
             const amount = this.customizations[ingredient.id] || 0;
             const drinkIng = this.drinkIngredients[ingredient.id];
             
+            // Only calculate cost if useDefaultPrice is true
+            // Check explicitly for false - if null/undefined, default to true for backward compatibility
+            const useDefaultPrice = drinkIng?.useDefaultPrice === false ? false : true;
+            
+            if (!useDefaultPrice) {
+                // Ingredient is included in base price, don't charge per unit
+                return;
+            }
+            
             if (drinkIng) {
                 // Calculate cost difference from default
                 const defaultAmount = drinkIng.defaultAmount || 0;
                 const difference = amount - defaultAmount;
-                total += difference * parseFloat(ingredient.unit_cost);
+                total += difference * parseFloat(ingredient.unit_cost || 0);
             } else {
                 // New ingredient addition
-                total += amount * parseFloat(ingredient.unit_cost);
+                total += amount * parseFloat(ingredient.unit_cost || 0);
             }
         });
 
         const totalElement = this.modal.querySelector('#customization-total');
         if (totalElement) {
             totalElement.textContent = total.toFixed(2);
+        }
+        
+        // Update base price display
+        const basePriceElement = this.modal.querySelector('#customization-base-price');
+        if (basePriceElement) {
+            basePriceElement.textContent = this.basePrice.toFixed(2);
         }
     }
 
@@ -497,6 +701,70 @@ class DrinkCustomizer {
             'count': 'Count'
         };
         return labels[unitType] || unitType;
+    }
+
+    getCategoryDisplayName(category) {
+        // Map category keys to display names with emojis
+        const categoryNames = {
+            'base_drinks': '☕ Base Drinks',
+            'sugars': '🍬 Sugars',
+            'liquid_creamers': '🥛 Liquid Creamers',
+            'toppings': '✨ Toppings',
+            'add_ins': '➕ Add-ins',
+            'espresso': '☕ Espresso',
+            'syrup': '🍯 Syrups',
+            'liquid': '🥛 Liquids',
+            'milk': '🥛 Milks',
+            'sweetener': '🍬 Sweeteners',
+            'topping': '✨ Toppings',
+            'flavor': '🌸 Flavors',
+            'other': '📦 Other'
+        };
+        
+        if (categoryNames[category]) {
+            return categoryNames[category];
+        }
+        
+        // Convert snake_case or camelCase to Title Case with emoji
+        const formatted = category
+            .replace(/_/g, ' ')
+            .replace(/([A-Z])/g, ' $1')
+            .trim()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+        
+        return '📋 ' + formatted;
+    }
+
+    sortCategories(categories) {
+        // Define the order for known categories
+        const categoryOrder = {
+            'base_drinks': 1,
+            'espresso': 2,
+            'liquid': 3,
+            'liquid_creamers': 4,
+            'milk': 5,
+            'sugars': 6,
+            'sweetener': 7,
+            'syrup': 8,
+            'flavor': 9,
+            'toppings': 10,
+            'topping': 11,
+            'add_ins': 12,
+            'other': 99
+        };
+
+        // Convert categories object to array and sort
+        return Object.entries(categories)
+            .map(([key, value]) => ({ key, ...value }))
+            .sort((a, b) => {
+                const orderA = categoryOrder[a.key] || 50;
+                const orderB = categoryOrder[b.key] || 50;
+                if (orderA !== orderB) return orderA - orderB;
+                // If same order, sort alphabetically by name
+                return a.name.localeCompare(b.name);
+            });
     }
 
     getUnitAbbreviation(unitType) {
@@ -550,20 +818,26 @@ class DrinkCustomizer {
                 if (ingredient && amount > 0) {
                     const defaultAmount = drinkIng.defaultAmount || 0;
                     const difference = amount - defaultAmount;
+                    // Use recipe's unit type if available, otherwise fall back to ingredient's default
+                    const effectiveUnitType = drinkIng.unitType || ingredient.unit_type;
+                    // Only charge if useDefaultPrice is true
+                    // Check explicitly for false - if null/undefined, default to true for backward compatibility
+                    const useDefaultPrice = drinkIng.useDefaultPrice === false ? false : true;
                     
                     // Add to recipe ingredients list (for order label)
                     recipeIngredients.push({
                         ingredientId: ingredient.id,
                         ingredientName: ingredient.name,
                         amount: amount,
-                        unitType: ingredient.unit_type,
-                        unitCost: parseFloat(ingredient.unit_cost || 0),
+                        unitType: effectiveUnitType,
+                        unitCost: useDefaultPrice ? parseFloat(ingredient.unit_cost || 0) : 0,
                         isFromRecipe: true,
-                        defaultAmount: defaultAmount
+                        defaultAmount: defaultAmount,
+                        useDefaultPrice: useDefaultPrice
                     });
                     
-                    // Calculate price adjustment if different from default
-                    if (difference !== 0) {
+                    // Calculate price adjustment if different from default (only if useDefaultPrice is true)
+                    if (useDefaultPrice && difference !== 0) {
                         priceAdjustment += difference * parseFloat(ingredient.unit_cost || 0);
                     }
                 }
@@ -576,7 +850,7 @@ class DrinkCustomizer {
                 
                 // Only process if not already in recipe ingredients and amount > 0
                 if (!drinkIng && amount > 0) {
-                    // New ingredient added
+                    // New ingredient added (always uses default price for add-ins)
                     recipeIngredients.push({
                         ingredientId: ingredient.id,
                         ingredientName: ingredient.name,
@@ -584,7 +858,8 @@ class DrinkCustomizer {
                         unitType: ingredient.unit_type,
                         unitCost: parseFloat(ingredient.unit_cost || 0),
                         isFromRecipe: false,
-                        defaultAmount: 0
+                        defaultAmount: 0,
+                        useDefaultPrice: true // Add-ins always use default price
                     });
                     
                     priceAdjustment += amount * parseFloat(ingredient.unit_cost || 0);
@@ -614,7 +889,8 @@ class DrinkCustomizer {
                 customizations: customizations, // Price adjustments
                 recipeIngredients: recipeIngredients, // Full recipe for order label
                 priceAdjustment: priceAdjustment,
-                finalPrice: finalPrice
+                finalPrice: finalPrice,
+                selectedSize: this.selectedSize ? this.selectedSize.size_name : null // Selected size name
             });
 
             this.modal.remove();

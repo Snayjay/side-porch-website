@@ -37,23 +37,33 @@ class AdminManager {
             return null;
         }
 
+        // Get shop_id from config - this website is for a specific shop
+        const shopId = configManager.getShopId();
+
         try {
-            const { data, error } = await client
+            let query = client
                 .from('coffee_club_accounts')
-                .select('role')
-                .eq('id', user.id)
-                .single();
+                .select('role, shop_id')
+                .eq('id', user.id);
+            
+            // Filter by shop_id from config (hardcoded for this website)
+            if (shopId) {
+                query = query.eq('shop_id', shopId);
+            }
+            
+            const { data, error } = await query.single();
 
             if (error) {
                 // If account doesn't exist, user might not have signed up yet
                 if (error.code === 'PGRST116') {
-                    console.log('User account not found in coffee_club_accounts, defaulting to customer');
+                    console.log('User account not found for shop', shopId, '- defaulting to customer');
                     this.userRole = 'customer';
                     return this.userRole;
                 }
                 throw error;
             }
             
+            console.log('getUserRole: Found account for shop', shopId, '- role:', data?.role);
             this.userRole = data?.role || 'customer';
             return this.userRole;
         } catch (error) {
@@ -194,6 +204,11 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            throw new Error('Shop ID not configured');
+        }
+
         // Normalize role to lowercase to match database constraint
         const normalizedRole = role?.toLowerCase().trim();
         
@@ -206,6 +221,7 @@ class AdminManager {
                 .from('coffee_club_accounts')
                 .update({ role: normalizedRole })
                 .eq('id', userId)
+                .eq('shop_id', shopId)
                 .select()
                 .single();
 
@@ -274,10 +290,12 @@ class AdminManager {
             if (categoryData.display_order !== undefined) updateData.display_order = parseInt(categoryData.display_order);
             if (categoryData.available !== undefined) updateData.available = categoryData.available;
 
+            const shopId = configManager.getShopId();
             const { data, error } = await client
                 .from('menu_categories')
                 .update(updateData)
                 .eq('id', categoryId)
+                .eq('shop_id', shopId)
                 .select()
                 .single();
 
@@ -299,11 +317,14 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+
         try {
             const { error } = await client
                 .from('menu_categories')
                 .delete()
-                .eq('id', categoryId);
+                .eq('id', categoryId)
+                .eq('shop_id', shopId);
 
             if (error) throw error;
             return { success: true };
@@ -658,10 +679,12 @@ class AdminManager {
             console.log('Update data:', updateData);
             console.log('Current session user:', session?.user?.id);
 
+            const shopId = configManager.getShopId();
             const { data, error } = await client
                 .from('products')
                 .update(updateData)
                 .eq('id', productId)
+                .eq('shop_id', shopId)
                 .select()
                 .maybeSingle();
 
@@ -702,11 +725,14 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+
         try {
             const { error } = await client
                 .from('products')
                 .delete()
-                .eq('id', productId);
+                .eq('id', productId)
+                .eq('shop_id', shopId);
 
             if (error) throw error;
             return { success: true };
@@ -831,10 +857,12 @@ class AdminManager {
             if (ingredientData.unit_cost !== undefined) updateData.unit_cost = parseFloat(ingredientData.unit_cost);
             if (ingredientData.available !== undefined) updateData.available = ingredientData.available;
 
+            const shopId = configManager.getShopId();
             const { data, error } = await client
                 .from('ingredients')
                 .update(updateData)
                 .eq('id', ingredientId)
+                .eq('shop_id', shopId)
                 .select()
                 .single();
 
@@ -864,11 +892,14 @@ class AdminManager {
             throw new Error('Unauthorized: Staff access required');
         }
 
+        const shopId = configManager.getShopId();
+
         try {
             const { error } = await client
                 .from('ingredients')
                 .delete()
-                .eq('id', ingredientId);
+                .eq('id', ingredientId)
+                .eq('shop_id', shopId);
 
             if (error) throw error;
             return { success: true };
@@ -958,7 +989,15 @@ class AdminManager {
             const { data, error } = await client
                 .from('drink_ingredients')
                 .select(`
-                    *,
+                    id,
+                    product_id,
+                    ingredient_id,
+                    default_amount,
+                    unit_type,
+                    is_required,
+                    is_removable,
+                    is_addable,
+                    use_default_price,
                     ingredient:ingredients(*)
                 `)
                 .eq('product_id', productId)
@@ -1038,7 +1077,7 @@ class AdminManager {
             // Get existing ingredients to determine what to update vs insert vs delete
             const { data: existingIngredients, error: fetchError } = await client
                 .from('drink_ingredients')
-                .select('ingredient_id, default_amount, is_required, is_removable, is_addable')
+                .select('ingredient_id, default_amount, unit_type, is_required, is_removable, is_addable, use_default_price')
                 .eq('product_id', productId);
 
             if (fetchError) {
@@ -1090,14 +1129,32 @@ class AdminManager {
             }
 
             for (const ing of uniqueIngredients) {
+                // Validate UUIDs before proceeding
+                if (!ing.ingredient_id || ing.ingredient_id === 'null' || ing.ingredient_id === 'undefined') {
+                    console.error('Invalid ingredient_id:', ing.ingredient_id);
+                    throw new Error(`Invalid ingredient_id: ${ing.ingredient_id}. Cannot save recipe ingredient.`);
+                }
+                
+                if (!productId || productId === 'null' || productId === 'undefined') {
+                    console.error('Invalid product_id:', productId);
+                    throw new Error(`Invalid product_id: ${productId}. Cannot save recipe ingredients.`);
+                }
+                
+                if (!shopId || shopId === 'null' || shopId === 'undefined') {
+                    console.error('Invalid shop_id:', shopId);
+                    throw new Error(`Invalid shop_id: ${shopId}. Cannot save recipe ingredients.`);
+                }
+                
                 const ingredientData = {
                     product_id: productId,
                     shop_id: shopId,
                     ingredient_id: ing.ingredient_id,
                     default_amount: parseFloat(ing.default_amount || 0),
+                    unit_type: (ing.unit_type && ing.unit_type !== 'null' && ing.unit_type !== 'undefined') ? ing.unit_type : null,  // Save the selected unit type for this recipe
                     is_required: ing.is_required || false,
                     is_removable: ing.is_removable !== undefined ? ing.is_removable : true,
-                    is_addable: ing.is_addable !== undefined ? ing.is_addable : true
+                    is_addable: ing.is_addable !== undefined ? ing.is_addable : true,
+                    use_default_price: ing.use_default_price !== undefined ? ing.use_default_price : true
                 };
 
                 if (existingIngredientMap.has(ing.ingredient_id)) {
@@ -1107,9 +1164,11 @@ class AdminManager {
                             .from('drink_ingredients')
                             .update({
                                 default_amount: ingredientData.default_amount,
+                                unit_type: ingredientData.unit_type,
                                 is_required: ingredientData.is_required,
                                 is_removable: ingredientData.is_removable,
-                                is_addable: ingredientData.is_addable
+                                is_addable: ingredientData.is_addable,
+                                use_default_price: ingredientData.use_default_price
                             })
                             .eq('product_id', productId)
                             .eq('ingredient_id', ing.ingredient_id)
@@ -1170,6 +1229,196 @@ class AdminManager {
         }
     }
 
+    // Product Size Management
+    async getProductSizes(productId) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            const shopId = configManager.getShopId();
+            if (!shopId) {
+                return { success: false, error: 'Shop ID not configured' };
+            }
+
+            const { data, error } = await client
+                .from('product_sizes')
+                .select('*')
+                .eq('product_id', productId)
+                .eq('shop_id', shopId)
+                .order('display_order', { ascending: true })
+                .order('size_name', { ascending: true });
+
+            if (error) throw error;
+            return { success: true, sizes: data || [] };
+        } catch (error) {
+            console.error('Get product sizes error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async setProductSizes(productId, sizes) {
+        const client = getSupabaseClient();
+        if (!client) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        if (!(await this.isStaff())) {
+            return { success: false, error: 'Unauthorized: Staff access required' };
+        }
+
+        try {
+            const shopId = configManager.getShopId();
+            if (!shopId) {
+                return { success: false, error: 'Shop ID not configured' };
+            }
+
+            // Verify session is active
+            const { data: { session }, error: sessionError } = await client.auth.getSession();
+            if (!session) {
+                throw new Error('No active session. Please log out and log back in.');
+            }
+
+            // Get existing sizes to determine what to update vs insert vs delete
+            const { data: existingSizes, error: fetchError } = await client
+                .from('product_sizes')
+                .select('id, size_name')
+                .eq('product_id', productId)
+                .eq('shop_id', shopId);
+
+            if (fetchError) {
+                console.error('Error fetching existing sizes:', fetchError);
+                throw fetchError;
+            }
+
+            const existingSizeMap = new Map();
+            existingSizes?.forEach(es => {
+                existingSizeMap.set(es.size_name, es);
+            });
+
+            // Remove duplicates from input - keep only the first occurrence of each size_name
+            const seenSizeNames = new Set();
+            const uniqueSizes = sizes?.filter(size => {
+                if (seenSizeNames.has(size.size_name)) {
+                    console.warn(`Duplicate size_name ${size.size_name} removed`);
+                    return false;
+                }
+                seenSizeNames.add(size.size_name);
+                return true;
+            }) || [];
+
+            const newSizeNames = new Set(uniqueSizes.map(s => s.size_name));
+            const existingSizeNames = new Set(existingSizeMap.keys());
+
+            // Delete sizes that are no longer in the list
+            const sizesToDelete = Array.from(existingSizeNames).filter(name => !newSizeNames.has(name));
+            if (sizesToDelete.length > 0) {
+                const { error: deleteError } = await client
+                    .from('product_sizes')
+                    .delete()
+                    .eq('product_id', productId)
+                    .eq('shop_id', shopId)
+                    .in('size_name', sizesToDelete);
+
+                if (deleteError) {
+                    console.error('Delete product sizes error:', deleteError);
+                    throw deleteError;
+                }
+            }
+
+            // Process each size: update if exists, insert if new
+            const updates = [];
+            const inserts = [];
+
+            for (const size of uniqueSizes) {
+                const sizeData = {
+                    product_id: productId,
+                    shop_id: shopId,
+                    size_name: size.size_name,
+                    size_oz: parseFloat(size.size_oz || 0),
+                    price: parseFloat(size.price || 0),
+                    display_order: parseInt(size.display_order || 0),
+                    available: size.available !== undefined ? size.available : true
+                };
+
+                if (existingSizeMap.has(size.size_name)) {
+                    // Update existing size
+                    updates.push(
+                        client
+                            .from('product_sizes')
+                            .update({
+                                size_oz: sizeData.size_oz,
+                                price: sizeData.price,
+                                display_order: sizeData.display_order,
+                                available: sizeData.available
+                            })
+                            .eq('product_id', productId)
+                            .eq('size_name', size.size_name)
+                            .eq('shop_id', shopId)
+                    );
+                } else {
+                    // Insert new size
+                    inserts.push(sizeData);
+                }
+            }
+
+            // Execute updates
+            if (updates.length > 0) {
+                const updateResults = await Promise.all(updates);
+                const updateErrors = updateResults.filter(r => r.error).map(r => r.error);
+                if (updateErrors.length > 0) {
+                    console.error('Error updating sizes:', updateErrors);
+                    throw updateErrors[0];
+                }
+            }
+
+            // Execute inserts
+            if (inserts.length > 0) {
+                console.log('Inserting new product sizes:', inserts);
+                const { data: insertedData, error: insertError } = await client
+                    .from('product_sizes')
+                    .insert(inserts)
+                    .select();
+
+                if (insertError) {
+                    console.error('Product sizes insert error:', insertError);
+                    console.error('Error code:', insertError.code);
+                    console.error('Error details:', insertError.details);
+                    console.error('Error hint:', insertError.hint);
+                    
+                    if (insertError.message && insertError.message.includes('row-level security')) {
+                        throw new Error(`RLS Policy Error: Cannot save product sizes. The database cannot verify your staff permissions.`);
+                    }
+                    
+                    throw insertError;
+                }
+            }
+
+            // Fetch all sizes to return
+            const { data: allSizes, error: fetchAllError } = await client
+                .from('product_sizes')
+                .select()
+                .eq('product_id', productId)
+                .eq('shop_id', shopId)
+                .order('display_order', { ascending: true });
+
+            if (fetchAllError) {
+                console.error('Error fetching all sizes:', fetchAllError);
+                // Don't throw - we've already updated/inserted successfully
+            }
+
+            return { success: true, sizes: allSizes || [] };
+        } catch (error) {
+            console.error('Set product sizes error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
     // Clear cached role
     clearRoleCache() {
         this.userRole = null;
@@ -1187,11 +1436,18 @@ class AdminManager {
         }
 
         try {
-            const { data, error } = await client
+            const shopId = configManager.getShopId();
+            let query = client
                 .from('unit_types')
                 .select('*')
                 .order('display_order', { ascending: true })
                 .order('name', { ascending: true });
+            
+            if (shopId) {
+                query = query.eq('shop_id', shopId);
+            }
+            
+            const { data, error } = await query;
 
             if (error) throw error;
             return { success: true, unitTypes: data || [] };
@@ -1212,13 +1468,20 @@ class AdminManager {
         }
 
         try {
+            const shopId = configManager.getShopId();
+            
             // Get the max display_order to add new item at the end
-            const { data: maxOrderData } = await client
+            let maxOrderQuery = client
                 .from('unit_types')
                 .select('display_order')
                 .order('display_order', { ascending: false })
-                .limit(1)
-                .single();
+                .limit(1);
+            
+            if (shopId) {
+                maxOrderQuery = maxOrderQuery.eq('shop_id', shopId);
+            }
+            
+            const { data: maxOrderData } = await maxOrderQuery.single();
 
             const maxOrder = maxOrderData?.display_order || 0;
 
@@ -1228,7 +1491,8 @@ class AdminManager {
                     name: unitTypeData.name.toLowerCase().trim(),
                     display_name: unitTypeData.display_name || unitTypeData.name,
                     abbreviation: unitTypeData.abbreviation || unitTypeData.name.toLowerCase().trim(),
-                    display_order: maxOrder + 1
+                    display_order: maxOrder + 1,
+                    shop_id: shopId
                 })
                 .select()
                 .single();
@@ -1251,6 +1515,8 @@ class AdminManager {
             return { success: false, error: 'Unauthorized: Staff access required' };
         }
 
+        const shopId = configManager.getShopId();
+
         try {
             const updateData = {};
             if (unitTypeData.name !== undefined) updateData.name = unitTypeData.name.toLowerCase().trim();
@@ -1262,6 +1528,7 @@ class AdminManager {
                 .from('unit_types')
                 .update(updateData)
                 .eq('id', unitTypeId)
+                .eq('shop_id', shopId)
                 .select()
                 .single();
 
@@ -1283,12 +1550,15 @@ class AdminManager {
             return { success: false, error: 'Unauthorized: Staff access required' };
         }
 
+        const shopId = configManager.getShopId();
+
         try {
             // First, get the unit type name to check if it's in use
             const { data: unitType, error: fetchError } = await client
                 .from('unit_types')
                 .select('name')
                 .eq('id', unitTypeId)
+                .eq('shop_id', shopId)
                 .single();
 
             if (fetchError) throw fetchError;
@@ -1301,6 +1571,7 @@ class AdminManager {
                 .from('ingredients')
                 .select('id, name')
                 .eq('unit_type', unitType.name)
+                .eq('shop_id', shopId)
                 .limit(1);
 
             if (checkError && checkError.code !== 'PGRST116') {
@@ -1321,7 +1592,8 @@ class AdminManager {
             const { error } = await client
                 .from('unit_types')
                 .delete()
-                .eq('id', unitTypeId);
+                .eq('id', unitTypeId)
+                .eq('shop_id', shopId);
 
             if (error) throw error;
             return { success: true };

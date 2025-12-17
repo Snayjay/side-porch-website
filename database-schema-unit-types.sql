@@ -2,19 +2,23 @@
 -- Run this SQL in your Supabase SQL Editor
 
 -- Step 1: Create unit_types table
+-- Note: shop_id is a 4-digit text code referencing coffee_shop(id)
 CREATE TABLE IF NOT EXISTS unit_types (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     display_name TEXT NOT NULL,
     abbreviation TEXT NOT NULL,
     display_order INTEGER DEFAULT 0,
+    shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(name, shop_id)  -- Each shop can have their own unit types with same name
 );
 
 -- Step 2: Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_unit_types_name ON unit_types(name);
 CREATE INDEX IF NOT EXISTS idx_unit_types_display_order ON unit_types(display_order);
+CREATE INDEX IF NOT EXISTS idx_unit_types_shop_id ON unit_types(shop_id);
 
 -- Step 3: Insert default unit types
 INSERT INTO unit_types (name, display_name, abbreviation, display_order) VALUES
@@ -72,39 +76,69 @@ DROP POLICY IF EXISTS "Anyone can view unit types" ON unit_types;
 DROP POLICY IF EXISTS "Staff can insert unit types" ON unit_types;
 DROP POLICY IF EXISTS "Staff can update unit types" ON unit_types;
 DROP POLICY IF EXISTS "Staff can delete unit types" ON unit_types;
+DROP POLICY IF EXISTS "Staff can insert unit types in their shop" ON unit_types;
+DROP POLICY IF EXISTS "Staff can update unit types in their shop" ON unit_types;
+DROP POLICY IF EXISTS "Staff can delete unit types in their shop" ON unit_types;
+DROP POLICY IF EXISTS "Developers can view all unit types" ON unit_types;
+DROP POLICY IF EXISTS "Developers can insert unit types" ON unit_types;
+DROP POLICY IF EXISTS "Developers can update unit types" ON unit_types;
+DROP POLICY IF EXISTS "Developers can delete unit types" ON unit_types;
 
--- Anyone can view unit types (public read)
+-- Anyone can view unit types for their shop
 CREATE POLICY "Anyone can view unit types"
     ON unit_types FOR SELECT
-    USING (true);
+    USING (shop_id IS NOT NULL);
 
--- Staff can manage unit types (insert, update, delete)
-CREATE POLICY "Staff can insert unit types"
+-- Staff can manage unit types in their shop
+CREATE POLICY "Staff can insert unit types in their shop"
     ON unit_types FOR INSERT
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM coffee_club_accounts
-            WHERE id = auth.uid() AND role = 'staff'
+            WHERE coffee_club_accounts.id = auth.uid()
+            AND coffee_club_accounts.role = 'staff'
+            AND coffee_club_accounts.shop_id = unit_types.shop_id
         )
     );
 
-CREATE POLICY "Staff can update unit types"
+CREATE POLICY "Staff can update unit types in their shop"
     ON unit_types FOR UPDATE
     USING (
         EXISTS (
             SELECT 1 FROM coffee_club_accounts
-            WHERE id = auth.uid() AND role = 'staff'
+            WHERE coffee_club_accounts.id = auth.uid()
+            AND coffee_club_accounts.role = 'staff'
+            AND coffee_club_accounts.shop_id = unit_types.shop_id
         )
     );
 
-CREATE POLICY "Staff can delete unit types"
+CREATE POLICY "Staff can delete unit types in their shop"
     ON unit_types FOR DELETE
     USING (
         EXISTS (
             SELECT 1 FROM coffee_club_accounts
-            WHERE id = auth.uid() AND role = 'staff'
+            WHERE coffee_club_accounts.id = auth.uid()
+            AND coffee_club_accounts.role = 'staff'
+            AND coffee_club_accounts.shop_id = unit_types.shop_id
         )
     );
+
+-- Developers can manage all unit types
+CREATE POLICY "Developers can view all unit types"
+    ON unit_types FOR SELECT
+    USING (is_developer());
+
+CREATE POLICY "Developers can insert unit types"
+    ON unit_types FOR INSERT
+    WITH CHECK (is_developer());
+
+CREATE POLICY "Developers can update unit types"
+    ON unit_types FOR UPDATE
+    USING (is_developer());
+
+CREATE POLICY "Developers can delete unit types"
+    ON unit_types FOR DELETE
+    USING (is_developer());
 
 -- Step 7: Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_unit_type_updated_at()

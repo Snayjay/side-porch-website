@@ -4,56 +4,24 @@
 -- Then run database-migration-multi-tenant.sql to migrate existing data
 
 -- Step 1: Create coffee_shop table (developer-only access)
+-- ID is a 4-digit text code (e.g., '0001', '0002', etc.)
 CREATE TABLE IF NOT EXISTS coffee_shop (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     domain TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Add code column if it doesn't exist (for existing installations)
-ALTER TABLE coffee_shop ADD COLUMN IF NOT EXISTS code TEXT;
-
--- Create unique index on code for faster lookups
-CREATE UNIQUE INDEX IF NOT EXISTS idx_coffee_shop_code ON coffee_shop(code);
-
--- Populate code for existing records if they don't have one
-DO $$
-DECLARE
-    shop_record RECORD;
-    counter INTEGER := 1;
-BEGIN
-    FOR shop_record IN 
-        SELECT id FROM coffee_shop 
-        WHERE code IS NULL OR code = ''
-        ORDER BY created_at ASC
-    LOOP
-        UPDATE coffee_shop
-        SET code = LPAD(counter::TEXT, 4, '0')
-        WHERE id = shop_record.id;
-        counter := counter + 1;
-    END LOOP;
-END $$;
-
--- Make code NOT NULL after populating existing records
--- Only if there are no NULL codes remaining
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM coffee_shop WHERE code IS NULL) THEN
-        ALTER TABLE coffee_shop ALTER COLUMN code SET NOT NULL;
-    END IF;
-END $$;
-
--- Function to generate next shop code
+-- Function to generate next shop code (4-digit format)
 CREATE OR REPLACE FUNCTION generate_next_shop_code()
 RETURNS TEXT AS $$
 DECLARE
     next_num INTEGER;
     code TEXT;
 BEGIN
-    -- Get the highest numeric code and add 1
-    SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(code, '[^0-9]', '', 'g') AS INTEGER)), 0) + 1
+    -- Get the highest numeric id and add 1
+    SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(id, '[^0-9]', '', 'g') AS INTEGER)), 0) + 1
     INTO next_num
     FROM coffee_shop;
     
@@ -65,19 +33,20 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Step 2: Add shop_id column to all existing tables
--- Note: These columns will be nullable initially for migration purposes
+-- Note: shop_id is a TEXT field containing 4-digit codes (e.g., '0001')
+-- These columns will be nullable initially for migration purposes
 -- After migration, they should be set to NOT NULL
 
-ALTER TABLE coffee_club_accounts ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE account_transactions ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
-ALTER TABLE drink_ingredients ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE coffee_club_accounts ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE account_transactions ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
+ALTER TABLE drink_ingredients ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE RESTRICT;
 -- site_config can be per-shop or global, so we'll make it nullable
-ALTER TABLE site_config ADD COLUMN IF NOT EXISTS shop_id UUID REFERENCES coffee_shop(id) ON DELETE CASCADE;
+ALTER TABLE site_config ADD COLUMN IF NOT EXISTS shop_id TEXT REFERENCES coffee_shop(id) ON DELETE CASCADE;
 
 -- Step 3: Create indexes on shop_id columns for performance
 CREATE INDEX IF NOT EXISTS idx_coffee_club_accounts_shop_id ON coffee_club_accounts(shop_id);

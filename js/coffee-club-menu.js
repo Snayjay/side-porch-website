@@ -54,7 +54,7 @@ class CoffeeClubMenu {
         }
 
         try {
-            // Load products with their categories
+            // Load products with their categories (including display_order for sorting)
             const { data, error } = await client
                 .from('products')
                 .select(`
@@ -62,7 +62,8 @@ class CoffeeClubMenu {
                     menu_categories (
                         id,
                         name,
-                        type
+                        type,
+                        display_order
                     )
                 `)
                 .eq('available', true)
@@ -127,6 +128,7 @@ class CoffeeClubMenu {
                     id: categoryId,
                     name: category.name,
                     type: category.type,
+                    display_order: category.display_order,
                     emoji: emoji,
                     products: [],
                     sections: {}
@@ -145,11 +147,19 @@ class CoffeeClubMenu {
             }
         });
 
-        // Sort categories by type (drink, food, merch) then by display_order
+        // Sort categories by display_order (primary), then by type, then by name
         const sortedCategories = Object.values(categoriesMap).sort((a, b) => {
-            const typeOrder = { 'drink': 1, 'food': 2, 'merch': 3, 'ingredient': 4 };
-            const typeDiff = (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
-            if (typeDiff !== 0) return typeDiff;
+            // Primary sort: display_order (handle 0 correctly - don't treat it as falsy)
+            const orderA = (a.display_order !== null && a.display_order !== undefined) ? parseInt(a.display_order) : 999999;
+            const orderB = (b.display_order !== null && b.display_order !== undefined) ? parseInt(b.display_order) : 999999;
+            if (orderA !== orderB) return orderA - orderB;
+            
+            // Secondary sort: type (if display_order is the same)
+            const typeA = a.type || '';
+            const typeB = b.type || '';
+            if (typeA !== typeB) return typeA.localeCompare(typeB);
+            
+            // Tertiary sort: name
             return a.name.localeCompare(b.name);
         });
 
@@ -268,18 +278,42 @@ class CoffeeClubMenu {
     }
 
     addCustomizedDrinkToCart(customizedDrink) {
-        const { product, customizations, recipeIngredients, priceAdjustment, finalPrice } = customizedDrink;
+        const { product, customizations, recipeIngredients, priceAdjustment, finalPrice, selectedSize } = customizedDrink;
         
-        // Create a unique cart item ID that includes customizations
-        const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Create a unique cart item ID that includes customizations and size
+        const sizeSuffix = selectedSize ? `_${selectedSize}` : '';
+        const cartItemId = `${product.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${sizeSuffix}`;
         
         const categoryType = product.menu_categories?.type || 'drink';
+        
+        // Build display name with size
+        let displayName = product.name;
+        if (selectedSize) {
+            displayName += ` (${selectedSize})`;
+        } else if (product.fixed_size_oz) {
+            displayName += ` (${product.fixed_size_oz}oz)`;
+        }
+        
+        // Calculate base price - use size price if size selected, otherwise product price
+        let basePriceForCart = parseFloat(product.price || 0);
+        if (selectedSize) {
+            // If size is selected, basePrice should be the size price (before ingredient adjustments)
+            // The finalPrice already includes size price + ingredient adjustments
+            // So basePrice should be size price, and priceAdjustment is ingredient adjustments only
+            // But wait - finalPrice is size price + ingredient adjustments
+            // So basePrice should be the size price, not product.price
+            // Let's use finalPrice - priceAdjustment to get the base (size) price
+            basePriceForCart = finalPrice - priceAdjustment;
+        }
+        
         this.cart.push({
             cartItemId: cartItemId,
             productId: product.id,
-            name: product.name,
+            name: displayName,
+            originalName: product.name, // Keep original name for reference
+            selectedSize: selectedSize, // Store selected size name
             category: categoryType,
-            basePrice: parseFloat(product.price || 0),
+            basePrice: basePriceForCart,
             priceAdjustment: priceAdjustment,
             finalPrice: finalPrice,
             taxRate: parseFloat(product.tax_rate || 0.0825),
@@ -386,7 +420,7 @@ class CoffeeClubMenu {
         this.cart.forEach(item => {
             const itemPrice = item.finalPrice || item.basePrice || item.price || 0;
             const itemSubtotal = itemPrice * item.quantity;
-            const itemTax = itemSubtotal * item.taxRate;
+            const itemTax = itemSubtotal * (item.taxRate || 0);
             const itemTotal = itemSubtotal + itemTax;
             const hasCustomizations = item.customizations && item.customizations.length > 0;
 
@@ -413,6 +447,7 @@ class CoffeeClubMenu {
                                 ` <span style="color: ${item.priceAdjustment > 0 ? 'var(--auburn)' : '#28a745'};">
                                     (${item.priceAdjustment > 0 ? '+' : ''}$${item.priceAdjustment.toFixed(2)})
                                 </span>` : ''}
+                            ${itemTax > 0 ? `<span style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-left: 0.5rem;">+ tax</span>` : ''}
                         </p>
                     </div>
                     <div class="cart-item-controls">
@@ -421,7 +456,11 @@ class CoffeeClubMenu {
                         <button class="qty-btn" onclick="coffeeClubMenu.updateQuantity('${item.cartItemId}', ${item.quantity + 1})">+</button>
                         <button class="remove-btn" onclick="coffeeClubMenu.removeFromCart('${item.cartItemId}')">×</button>
                     </div>
-                    <div class="cart-item-total">$${itemTotal.toFixed(2)}</div>
+                    <div class="cart-item-total">
+                        <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">$${itemSubtotal.toFixed(2)}</div>
+                        ${itemTax > 0 ? `<div style="font-size: 0.75rem; color: var(--text-dark); opacity: 0.6;">+$${itemTax.toFixed(2)} tax</div>` : ''}
+                        <div style="font-weight: 600; color: var(--deep-brown); margin-top: 0.25rem;">$${itemTotal.toFixed(2)}</div>
+                    </div>
                 </div>
             `;
         });

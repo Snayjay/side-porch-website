@@ -4,8 +4,8 @@
   "description": "Side Porch Coffee Co. website with Coffee Club prepay system",
   "private": true,
   "scripts": {
-    "start": "npx --yes http-server . -p 8080 -o",
-    "dev": "npx --yes http-server . -p 8080 -o",
+    "start": "npx --yes http-server . -p 8080 -o -c-1",
+    "dev": "npx --yes http-server . -p 8080 -o -c-1",
     "supabase": "npx supabase",
     "supabase:version": "npx supabase --version",
     "supabase:status": "npx supabase status",

@@ -22,20 +22,11 @@ class ConfigManager {
         // Priority 1: Load from config.local.js (window.COFFEE_CLUB_CONFIG) if available (local dev, gitignored)
         this.loadFromLocalConfig();
         
-        // Priority 1b: Load from config.public.js (public config file, committed to repo)
-        // This allows GitHub Pages to work without config.local.js
-        this.loadFromPublicConfig();
-        
         // Priority 2: Load from localStorage (for browser-based setup)
         this.loadFromStorage();
         
-        // If config.local.js didn't load anything, make sure we still notify
-        // (loadFromStorage will handle notification, but if neither worked, notify anyway)
-        setTimeout(() => {
-            if (!this.loaded) {
-                this.notifyConfigLoaded();
-            }
-        }, 100);
+        // Priority 3: Load from config.public.js (public config file, committed to repo)
+        this.loadFromPublicConfig();
         
         // Priority 3: After Supabase is ready, try to load from database and sync (only once)
         let databaseSyncAttempted = false;
@@ -91,18 +82,29 @@ class ConfigManager {
     }
     
     loadFromPublicConfig() {
-        // This is called after loadFromLocalConfig
-        // Only load from public config if we don't already have config from local
-        if (!this.loaded && typeof window !== 'undefined' && window.COFFEE_CLUB_CONFIG) {
+        // This runs LAST in the loading sequence
+        // shop_id from public config is the DEFINITIVE source - never override it
+        if (typeof window !== 'undefined' && window.COFFEE_CLUB_CONFIG) {
             const publicConfig = window.COFFEE_CLUB_CONFIG;
-            // Only use public config if we don't have config yet
+            
+            // ALWAYS load shop_id from public config - this is the source of truth for this website
+            // This MUST override anything from localStorage or local config
+            if (publicConfig.shop_id) {
+                this.config.shop_id = publicConfig.shop_id;
+            }
+            
+            // Load Supabase config if we don't have it from local config
             if (publicConfig.supabase?.url && publicConfig.supabase?.anonKey) {
                 // Check if anonKey is not a placeholder
                 if (publicConfig.supabase.anonKey !== 'YOUR_SUPABASE_ANON_KEY_HERE' && 
                     publicConfig.supabase.anonKey !== '') {
-                    this.config.supabase.url = publicConfig.supabase.url;
-                    this.config.supabase.anonKey = publicConfig.supabase.anonKey;
-                    this.loaded = true;
+                    // Only set if not already set by local config
+                    if (!this.config.supabase.url) {
+                        this.config.supabase.url = publicConfig.supabase.url;
+                    }
+                    if (!this.config.supabase.anonKey) {
+                        this.config.supabase.anonKey = publicConfig.supabase.anonKey;
+                    }
                 }
             }
             if (publicConfig.stripe?.publishableKey && 
@@ -113,24 +115,23 @@ class ConfigManager {
                 publicConfig.openai.apiKey !== 'YOUR_OPENAI_API_KEY_HERE') {
                 this.config.openai.apiKey = publicConfig.openai.apiKey;
             }
-            if (publicConfig.shop_id) {
-                this.config.shop_id = publicConfig.shop_id;
-            }
-            // Save to localStorage as backup
-            if (this.loaded) {
-                this.saveToStorage();
-                
-                // If Supabase is configured, initialize it immediately
-                if (this.isSupabaseConfigured() && typeof initializeSupabase === 'function') {
-                    // Wait a tick to ensure supabase-client.js is loaded
-                    setTimeout(() => {
-                        initializeSupabase();
-                    }, 0);
-                }
-                // Always notify that config is loaded
-                this.notifyConfigLoaded();
+        }
+        
+        // Mark as loaded if Supabase is configured
+        if (this.isSupabaseConfigured()) {
+            this.loaded = true;
+            this.saveToStorage();
+            
+            // Initialize Supabase if available
+            if (typeof initializeSupabase === 'function') {
+                setTimeout(() => {
+                    initializeSupabase();
+                }, 0);
             }
         }
+        
+        // Always notify that config loading is complete
+        this.notifyConfigLoaded();
     }
     
     notifyConfigLoaded() {
@@ -214,50 +215,30 @@ class ConfigManager {
     }
 
     loadFromStorage() {
-        // Load from localStorage as fallback
+        // Load from localStorage as fallback for Supabase/Stripe config only
+        // Note: shop_id is NOT loaded from storage - it always comes from config.public.js
         try {
             const stored = localStorage.getItem('coffeeClubConfig');
             if (stored) {
                 const parsed = JSON.parse(stored);
-                let configLoaded = false;
+                // Only load Supabase and Stripe config from storage
+                // DO NOT load shop_id from storage - it must come from config.public.js
                 if (parsed.supabase?.url) {
                     this.config.supabase.url = parsed.supabase.url;
-                    configLoaded = true;
                 }
                 if (parsed.supabase?.anonKey) {
                     this.config.supabase.anonKey = parsed.supabase.anonKey;
-                    configLoaded = true;
                 }
                 if (parsed.stripe?.publishableKey) {
                     this.config.stripe.publishableKey = parsed.stripe.publishableKey;
                 }
-                if (parsed.shop_id) {
-                    this.config.shop_id = parsed.shop_id;
-                }
-                if (configLoaded && this.isSupabaseConfigured()) {
-                    this.loaded = true;
-                    // Initialize Supabase if config is valid
-                    if (typeof initializeSupabase === 'function') {
-                        // Wait a tick to ensure supabase-client.js is loaded
-                        setTimeout(() => {
-                            initializeSupabase();
-                            this.notifyConfigLoaded();
-                        }, 0);
-                    } else {
-                        this.notifyConfigLoaded();
-                    }
-                } else {
-                    // Still notify even if not configured, so UI can update
-                    this.notifyConfigLoaded();
-                }
-            } else {
-                // No config found, notify anyway so UI knows
-                this.notifyConfigLoaded();
+                // Note: shop_id is intentionally NOT loaded from storage
+                // It MUST come from config.public.js to ensure correct shop identification
             }
         } catch (e) {
             console.error('Error loading config from storage:', e);
-            this.notifyConfigLoaded();
         }
+        // Don't notify here - loadFromPublicConfig will handle initialization
     }
 
     saveToStorage() {

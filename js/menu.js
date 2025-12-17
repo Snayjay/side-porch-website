@@ -133,10 +133,9 @@ class MenuDisplay {
 
         // Sort all categories by display_order (primary), then by type, then by name
         const sortedCategories = [...this.categories].sort((a, b) => {
-            const orderA = parseInt(a.display_order || 999999);
-            const orderB = parseInt(b.display_order || 999999);
-            
-            // Primary sort: display_order
+            // Primary sort: display_order (handle 0 correctly - don't treat it as falsy)
+            const orderA = (a.display_order !== null && a.display_order !== undefined) ? parseInt(a.display_order) : 999999;
+            const orderB = (b.display_order !== null && b.display_order !== undefined) ? parseInt(b.display_order) : 999999;
             if (orderA !== orderB) {
                 return orderA - orderB;
             }

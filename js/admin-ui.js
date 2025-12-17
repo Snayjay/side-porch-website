@@ -10,6 +10,7 @@ class AdminUI {
         this.editingDrinkIngredients = null;
         this.selectedCategoryType = 'drink';
         this.selectedCategoryId = null;
+        this.savedSizes = []; // Store product sizes for form
     }
 
     async init() {
@@ -919,6 +920,31 @@ class AdminUI {
                             <option value="both">Both</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="product-has-sizes" onchange="adminUI.toggleSizeOptions()">
+                            Has Size Options
+                        </label>
+                        <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.5rem;">
+                            Check this if the drink has multiple sizes (Small, Medium, Large). Uncheck for fixed-size drinks (e.g., Cortado).
+                        </p>
+                    </div>
+                    <div id="product-size-options-container" style="display: none; margin-top: 1rem; padding: 1rem; background: var(--cream); border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">
+                        <h4 style="font-size: 1rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem;">Size Options</h4>
+                        <div id="product-sizes-list" style="margin-bottom: 1rem;">
+                            <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>
+                        </div>
+                        <button type="button" class="btn btn-sm" onclick="adminUI.addProductSizeRow()" style="margin-bottom: 0.5rem;">+ Add Size</button>
+                    </div>
+                    <div id="product-fixed-size-container" style="display: none; margin-top: 1rem;">
+                        <div class="form-group">
+                            <label for="product-fixed-size-oz">Fixed Size (oz) *</label>
+                            <input type="number" id="product-fixed-size-oz" step="0.1" min="0.1" placeholder="e.g., 4.0">
+                            <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.5rem;">
+                                Enter the fixed size in ounces (e.g., 4 for a 4oz Cortado).
+                            </p>
+                        </div>
+                    </div>
                 ` : ''}
                 <div class="form-group">
                     <label for="product-image-url">Image URL</label>
@@ -998,6 +1024,42 @@ class AdminUI {
             document.getElementById('product-description').value = product.description || '';
             document.getElementById('product-price').value = product.price || '';
             document.getElementById('product-tax-rate').value = product.tax_rate || 0.0825;
+            
+            // Load size options
+            if (categoryType === 'drink') {
+                // First, check if sizes exist in database (regardless of has_sizes flag)
+                const sizesResult = await adminManager.getProductSizes(productId);
+                const existingSizes = sizesResult.success ? (sizesResult.sizes || []) : [];
+                
+                // Determine if product has sizes - check both flag and actual data
+                const hasSizes = product.has_sizes === true || existingSizes.length > 0;
+                
+                // Update checkbox and UI
+                const hasSizesCheckbox = document.getElementById('product-has-sizes');
+                if (hasSizesCheckbox) {
+                    hasSizesCheckbox.checked = hasSizes;
+                }
+                
+                // Toggle UI visibility
+                this.toggleSizeOptions();
+                
+                if (hasSizes) {
+                    // Load existing sizes (will populate from existingSizes if already loaded)
+                    if (existingSizes.length > 0) {
+                        this.savedSizes = existingSizes;
+                        this.renderProductSizes();
+                    } else {
+                        await this.loadProductSizes(productId);
+                    }
+                } else {
+                    // Load fixed size
+                    const fixedSizeInput = document.getElementById('product-fixed-size-oz');
+                    if (fixedSizeInput) {
+                        fixedSizeInput.value = product.fixed_size_oz || '';
+                    }
+                }
+            }
+            
             const imageInput = document.getElementById('product-image-url');
             if (imageInput) {
                 imageInput.value = product.image_url || '';
@@ -1042,8 +1104,8 @@ class AdminUI {
         for (const di of drinkIngredients) {
             const ingredient = ingredientMap[di.ingredient_id];
             if (ingredient) {
-                // Default to ingredient's unit_type if not specified
-                const unit = ingredient.unit_type || 'parts';
+                // Use the saved unit_type from drink_ingredients, fall back to ingredient's default
+                const unit = di.unit_type || ingredient.unit_type || 'parts';
                 let unitDisplay = 'Parts';
                 if (unit === 'parts') {
                     unitDisplay = 'Parts';
@@ -1109,6 +1171,31 @@ class AdminUI {
                 productData.temp = tempInput.value || null;
             }
 
+            // Add size fields for drinks
+            const hasSizesCheckbox = document.getElementById('product-has-sizes');
+            if (hasSizesCheckbox) {
+                const hasSizes = hasSizesCheckbox.checked;
+                
+                // Check if sizes actually exist in the form (even if checkbox wasn't checked)
+                const sizesContainer = document.getElementById('product-sizes-list');
+                const sizeRows = sizesContainer ? sizesContainer.querySelectorAll('.product-size-row') : [];
+                const hasActualSizes = sizeRows.length > 0;
+                
+                // Set has_sizes to true if checkbox is checked OR if sizes exist
+                productData.has_sizes = hasSizes || hasActualSizes;
+                
+                if (productData.has_sizes) {
+                    productData.fixed_size_oz = null;
+                } else {
+                    const fixedSizeInput = document.getElementById('product-fixed-size-oz');
+                    if (fixedSizeInput && fixedSizeInput.value) {
+                        productData.fixed_size_oz = parseFloat(fixedSizeInput.value);
+                    } else {
+                        productData.fixed_size_oz = null;
+                    }
+                }
+            }
+
             console.log('Saving product:', productData);
 
             let result;
@@ -1125,6 +1212,21 @@ class AdminUI {
             if (result.success) {
                 const productId = result.product?.id || this.editingProduct;
                 console.log('Product saved with ID:', productId);
+                
+                // Save sizes if it's a drink with sizes
+                const hasSizesCheckbox = document.getElementById('product-has-sizes');
+                if (hasSizesCheckbox && hasSizesCheckbox.checked && productId) {
+                    try {
+                        console.log('Saving sizes for product:', productId);
+                        await this.saveProductSizesFromForm(productId);
+                        console.log('Sizes saved successfully');
+                    } catch (error) {
+                        console.error('Error saving sizes:', error);
+                        errorDiv.textContent = `Item saved but failed to save sizes: ${error.message}`;
+                        errorDiv.style.display = 'block';
+                        return; // Don't close modal if sizes failed to save
+                    }
+                }
                 
                 // Save ingredients if it's a drink
                 const savedIngredientsContainer = document.getElementById('saved-ingredients-container');
@@ -1149,6 +1251,7 @@ class AdminUI {
                 );
                 this.editingProduct = null;
                 this.savedIngredients = []; // Clear saved ingredients
+                this.savedSizes = []; // Clear saved sizes
             } else {
                 const errorMsg = result.error || 'Error saving item';
                 console.error('Save product error:', result);
@@ -1173,6 +1276,7 @@ class AdminUI {
         const drinkIngredients = this.savedIngredients.map(savedIng => ({
             ingredient_id: savedIng.ingredient_id,
             default_amount: savedIng.quantity,
+            unit_type: savedIng.unit,  // Save the selected unit type for this recipe
             is_required: false,
             is_removable: true,
             is_addable: false
@@ -1182,6 +1286,146 @@ class AdminUI {
         if (!result.success) {
             console.error('Error saving drink ingredients:', result.error);
             throw new Error(result.error || 'Failed to save ingredients');
+        }
+    }
+
+    toggleSizeOptions() {
+        const hasSizesCheckbox = document.getElementById('product-has-sizes');
+        const sizeOptionsContainer = document.getElementById('product-size-options-container');
+        const fixedSizeContainer = document.getElementById('product-fixed-size-container');
+        const fixedSizeInput = document.getElementById('product-fixed-size-oz');
+        
+        if (!hasSizesCheckbox) return;
+        
+        const hasSizes = hasSizesCheckbox.checked;
+        
+        if (sizeOptionsContainer) {
+            sizeOptionsContainer.style.display = hasSizes ? 'block' : 'none';
+        }
+        
+        if (fixedSizeContainer) {
+            fixedSizeContainer.style.display = hasSizes ? 'none' : 'block';
+        }
+        
+        if (fixedSizeInput) {
+            fixedSizeInput.required = !hasSizes;
+        }
+    }
+
+    addProductSizeRow(sizeData = null) {
+        const container = document.getElementById('product-sizes-list');
+        if (!container) return;
+        
+        const rowId = 'size-row-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        
+        const row = document.createElement('div');
+        row.id = rowId;
+        row.className = 'product-size-row';
+        row.style.cssText = 'display: flex; gap: 0.75rem; align-items: flex-end; margin-bottom: 0.75rem; padding: 0.75rem; background: var(--parchment); border-radius: 6px; border: 1px solid rgba(139, 111, 71, 0.2);';
+        
+        row.innerHTML = `
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Size Name</label>
+                <input type="text" class="size-name" value="${sizeData?.size_name || ''}" placeholder="e.g., Small" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Size (oz)</label>
+                <input type="number" class="size-oz" step="0.1" min="0.1" value="${sizeData?.size_oz || ''}" placeholder="8.0" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Price</label>
+                <input type="number" class="size-price" step="0.01" min="0" value="${sizeData?.price || ''}" placeholder="3.50" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 0 0 80px;">
+                <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Order</label>
+                <input type="number" class="size-display-order" step="1" min="0" value="${sizeData?.display_order || 0}" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+            </div>
+            <div style="flex: 0 0 auto; padding-bottom: 0.5rem;">
+                <button type="button" onclick="adminUI.removeProductSizeRow('${rowId}')" style="background: var(--auburn); color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.9rem;" title="Remove size">✕</button>
+            </div>
+        `;
+        
+        container.appendChild(row);
+        
+        // Clear placeholder text if container had it
+        const placeholder = container.querySelector('p');
+        if (placeholder && placeholder.textContent.includes('No sizes added')) {
+            placeholder.remove();
+        }
+    }
+
+    removeProductSizeRow(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) {
+            row.remove();
+        }
+        
+        // Show placeholder if no sizes left
+        const container = document.getElementById('product-sizes-list');
+        if (container && container.children.length === 0) {
+            container.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>';
+        }
+    }
+
+    async loadProductSizes(productId) {
+        if (!productId) return;
+        
+        const result = await adminManager.getProductSizes(productId);
+        if (!result.success) {
+            console.error('Error loading product sizes:', result.error);
+            return;
+        }
+        
+        this.savedSizes = result.sizes || [];
+        this.renderProductSizes();
+    }
+
+    renderProductSizes() {
+        const container = document.getElementById('product-sizes-list');
+        if (!container) return;
+        
+        if (!this.savedSizes || this.savedSizes.length === 0) {
+            container.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        this.savedSizes.forEach(size => {
+            this.addProductSizeRow(size);
+        });
+    }
+
+    async saveProductSizesFromForm(productId) {
+        const container = document.getElementById('product-sizes-list');
+        if (!container) {
+            // No sizes container means product doesn't have sizes
+            return;
+        }
+        
+        const sizeRows = container.querySelectorAll('.product-size-row');
+        const sizes = [];
+        
+        sizeRows.forEach(row => {
+            const sizeName = row.querySelector('.size-name')?.value.trim();
+            const sizeOz = row.querySelector('.size-oz')?.value;
+            const price = row.querySelector('.size-price')?.value;
+            const displayOrder = row.querySelector('.size-display-order')?.value;
+            
+            if (sizeName && sizeOz && price) {
+                sizes.push({
+                    size_name: sizeName,
+                    size_oz: parseFloat(sizeOz),
+                    price: parseFloat(price),
+                    display_order: parseInt(displayOrder || 0),
+                    available: true
+                });
+            }
+        });
+        
+        const result = await adminManager.setProductSizes(productId, sizes);
+        if (!result.success) {
+            console.error('Error saving product sizes:', result.error);
+            throw new Error(result.error || 'Failed to save sizes');
         }
     }
 
@@ -1225,12 +1469,16 @@ class AdminUI {
 
         const modal = this.createModal(
             `Manage Recipe: ${product?.name || 'Drink'}`,
-            this.getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap)
+            await this.getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap)
         );
         document.body.appendChild(modal);
     }
 
-    getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap) {
+    async getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap) {
+        // Load unit types for the unit selector
+        const unitTypesResult = await adminManager.getAllUnitTypes(true);
+        const unitTypes = unitTypesResult.unitTypes || [];
+        
         const categories = {
             base_drinks: { name: 'Base Drinks', ingredients: [] },
             sugars: { name: 'Sugars', ingredients: [] },
@@ -1251,32 +1499,53 @@ class AdminUI {
             html += `<h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--deep-brown);">${category.name}</h4>`;
             category.ingredients.forEach(ing => {
                 const di = drinkIngredientMap[ing.id];
+                // Get saved unit type or default to ingredient's unit type
+                const savedUnitType = di?.unit_type || ing.unit_type || 'parts';
+                
+                // Build unit type options
+                let unitTypeOptions = '<option value="parts">Parts</option>';
+                unitTypes.forEach(ut => {
+                    const selected = savedUnitType === ut.name ? 'selected' : '';
+                    unitTypeOptions += `<option value="${ut.name}" ${selected}>${ut.display_name || ut.name}</option>`;
+                });
+                
                 html += `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem; background: var(--cream); border-radius: 4px; margin-bottom: 0.5rem;">
-                        <div style="flex: 1;">
-                            <strong>${ing.name}</strong>
-                            <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7;">
-                                ${ing.unit_type} • $${parseFloat(ing.unit_cost).toFixed(2)}/${ing.unit_type === 'shots' ? 'shot' : ing.unit_type === 'pumps' ? 'pump' : ing.unit_type}
+                    <div style="padding: 0.75rem; background: var(--cream); border-radius: 4px; margin-bottom: 0.5rem;">
+                        <!-- First line: Name and default info -->
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                            <div style="flex: 1;">
+                                <strong style="font-size: 1rem; color: var(--deep-brown);">${ing.name}</strong>
+                                <div style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.25rem;">
+                                    Default: ${ing.unit_type} • $${parseFloat(ing.unit_cost).toFixed(2)}/${ing.unit_type === 'shots' ? 'shot' : ing.unit_type === 'pumps' ? 'pump' : ing.unit_type}
+                                </div>
                             </div>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <label style="font-size: 0.85rem;">Default:</label>
-                            <input type="number" id="ing-${ing.id}-amount" step="0.1" min="0" value="${di?.default_amount || 0}" style="width: 60px; padding: 0.25rem;">
-                        </div>
-                        <div>
-                            <label style="font-size: 0.85rem;">
-                                <input type="checkbox" id="ing-${ing.id}-required" ${di?.is_required ? 'checked' : ''}> Required
-                            </label>
-                        </div>
-                        <div>
-                            <label style="font-size: 0.85rem;">
-                                <input type="checkbox" id="ing-${ing.id}-removable" ${di?.is_removable !== false ? 'checked' : ''}> Removable
-                            </label>
-                        </div>
-                        <div>
-                            <label style="font-size: 0.85rem;">
-                                <input type="checkbox" id="ing-${ing.id}-addable" ${di?.is_addable !== false ? 'checked' : ''}> Addable
-                            </label>
+                        <!-- Second line: Controls and checkboxes -->
+                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <label style="font-size: 0.85rem; color: var(--deep-brown);">Amount:</label>
+                                <input type="number" id="ing-${ing.id}-amount" step="0.1" min="0" value="${di?.default_amount || 0}" style="width: 70px; padding: 0.4rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; font-size: 0.9rem;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <label style="font-size: 0.85rem; color: var(--deep-brown);">Unit:</label>
+                                <select id="ing-${ing.id}-unit-type" style="padding: 0.4rem; font-size: 0.85rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; min-width: 100px;">
+                                    ${unitTypeOptions}
+                                </select>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 1rem; margin-left: auto;">
+                                <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;">
+                                    <input type="checkbox" id="ing-${ing.id}-required" ${di?.is_required ? 'checked' : ''} style="margin-right: 0.25rem;"> Required
+                                </label>
+                                <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;">
+                                    <input type="checkbox" id="ing-${ing.id}-removable" ${di?.is_removable !== false ? 'checked' : ''} style="margin-right: 0.25rem;"> Removable
+                                </label>
+                                <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;">
+                                    <input type="checkbox" id="ing-${ing.id}-addable" ${di?.is_addable !== false ? 'checked' : ''} style="margin-right: 0.25rem;"> Addable
+                                </label>
+                                <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;" title="If checked, ingredient uses default price. If unchecked, ingredient is included in base drink price (no per-unit charge).">
+                                    <input type="checkbox" id="ing-${ing.id}-use-default-price" ${di?.use_default_price === false ? '' : 'checked'} style="margin-right: 0.25rem;"> Use Default Price
+                                </label>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1302,18 +1571,31 @@ class AdminUI {
 
         const ingredients = [];
         allIngredients.forEach(ing => {
+            // Validate ingredient ID is a valid UUID
+            if (!ing.id || ing.id === 'null' || ing.id === 'undefined') {
+                console.warn(`Skipping ingredient with invalid ID:`, ing);
+                return;
+            }
+            
             const amount = parseFloat(document.getElementById(`ing-${ing.id}-amount`)?.value || 0);
+            const unitType = document.getElementById(`ing-${ing.id}-unit-type`)?.value || ing.unit_type || 'parts';
             const required = document.getElementById(`ing-${ing.id}-required`)?.checked || false;
             const removable = document.getElementById(`ing-${ing.id}-removable`)?.checked !== false;
             const addable = document.getElementById(`ing-${ing.id}-addable`)?.checked !== false;
+            const useDefaultPrice = document.getElementById(`ing-${ing.id}-use-default-price`)?.checked !== false;
 
             if (amount > 0 || required) {
+                // Ensure unit_type is null if empty or invalid, not the string "null"
+                const finalUnitType = (unitType && unitType !== 'null' && unitType !== 'undefined' && unitType.trim() !== '') ? unitType : null;
+                
                 ingredients.push({
                     ingredient_id: ing.id,
                     default_amount: amount,
+                    unit_type: finalUnitType, // Save the selected unit type (null if empty)
                     is_required: required,
                     is_removable: removable,
-                    is_addable: addable
+                    is_addable: addable,
+                    use_default_price: useDefaultPrice
                 });
             }
         });

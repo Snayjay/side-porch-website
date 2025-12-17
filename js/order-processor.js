@@ -55,6 +55,7 @@ class OrderProcessor {
                     tax_amount: itemTax,
                     subtotal: itemSubtotal,
                     total: itemTotal,
+                    selected_size: item.selectedSize || null, // Store selected size name
                     customizations: item.customizations || [] // Store customizations for reference
                 };
             });
