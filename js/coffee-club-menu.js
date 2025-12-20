@@ -73,13 +73,54 @@ class CoffeeClubMenu {
             if (error) throw error;
             
             this.products = data || [];
+            
+            // Load sizes for all products (check both has_sizes flag and actual sizes in DB)
+            // Get all product IDs first
+            const allProductIds = this.products.map(p => p.id);
+            
+            if (allProductIds.length > 0) {
+                const { data: sizesData, error: sizesError } = await client
+                    .from('product_sizes')
+                    .select('product_id, price')
+                    .eq('shop_id', shopId)
+                    .in('product_id', allProductIds)
+                    .eq('available', true);
+                
+                if (sizesError) {
+                    console.error('Error loading product sizes:', sizesError);
+                } else if (sizesData && sizesData.length > 0) {
+                    console.log(`Loaded ${sizesData.length} product sizes`);
+                    
+                    // Group sizes by product_id
+                    const sizesByProduct = {};
+                    sizesData.forEach(size => {
+                        if (!sizesByProduct[size.product_id]) {
+                            sizesByProduct[size.product_id] = [];
+                        }
+                        sizesByProduct[size.product_id].push(parseFloat(size.price));
+                    });
+                    
+                    // Attach sizes to products
+                    this.products.forEach(product => {
+                        if (sizesByProduct[product.id]) {
+                            product.sizes = sizesByProduct[product.id];
+                            console.log(`Product "${product.name}" has ${product.sizes.length} sizes:`, product.sizes);
+                        }
+                    });
+                } else {
+                    console.log('No product sizes found');
+                }
+            }
+            
             console.log('Loaded products for Coffee Club Menu:', this.products.length);
             console.log('Sample products:', this.products.slice(0, 3).map(p => ({
                 id: p.id,
                 name: p.name,
                 category_id: p.category_id,
                 has_menu_categories: !!p.menu_categories,
-                menu_categories: p.menu_categories
+                menu_categories: p.menu_categories,
+                has_sizes: p.has_sizes,
+                sizes_count: p.sizes ? p.sizes.length : 0
             })));
         } catch (error) {
             console.error('Load products error:', error);
@@ -224,6 +265,24 @@ class CoffeeClubMenu {
         const productId = product.id;
         const hasImage = product.image_url && product.image_url.trim() !== '';
         
+        // Calculate price display - show range if product has sizes
+        let priceDisplay = '';
+        if (product.sizes && product.sizes.length > 0) {
+            const minPrice = Math.min(...product.sizes);
+            const maxPrice = Math.max(...product.sizes);
+            if (minPrice === maxPrice) {
+                priceDisplay = `$${minPrice.toFixed(2)}`;
+            } else {
+                priceDisplay = `$${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)}`;
+            }
+            console.log(`Product "${product.name}" price range: ${priceDisplay}`, product.sizes);
+        } else {
+            priceDisplay = `$${parseFloat(product.price || 0).toFixed(2)}`;
+            if (product.has_sizes) {
+                console.log(`Product "${product.name}" has has_sizes=true but no sizes array`, product);
+            }
+        }
+        
         return `
             <div class="menu-line-item" data-product-id="${productId}">
                 ${hasImage ? `
@@ -235,7 +294,7 @@ class CoffeeClubMenu {
                     <div class="menu-item-name-text">${this.escapeHtml(product.name)}</div>
                     ${description ? `<div class="menu-item-description">${this.escapeHtml(description)}</div>` : ''}
                 </div>
-                <div class="menu-line-item-price">$${parseFloat(product.price || 0).toFixed(2)}</div>
+                <div class="menu-line-item-price">${priceDisplay}</div>
                 <div class="menu-line-item-action">
                     ${isDrink ? `
                         <button class="btn btn-sm" onclick="coffeeClubMenu.customizeDrink('${productId}')">
@@ -278,7 +337,7 @@ class CoffeeClubMenu {
     }
 
     addCustomizedDrinkToCart(customizedDrink) {
-        const { product, customizations, recipeIngredients, priceAdjustment, finalPrice, selectedSize } = customizedDrink;
+        const { product, customizations, recipeIngredients, priceAdjustment, finalPrice, basePrice, selectedSize } = customizedDrink;
         
         // Create a unique cart item ID that includes customizations and size
         const sizeSuffix = selectedSize ? `_${selectedSize}` : '';
@@ -294,17 +353,9 @@ class CoffeeClubMenu {
             displayName += ` (${product.fixed_size_oz}oz)`;
         }
         
-        // Calculate base price - use size price if size selected, otherwise product price
-        let basePriceForCart = parseFloat(product.price || 0);
-        if (selectedSize) {
-            // If size is selected, basePrice should be the size price (before ingredient adjustments)
-            // The finalPrice already includes size price + ingredient adjustments
-            // So basePrice should be size price, and priceAdjustment is ingredient adjustments only
-            // But wait - finalPrice is size price + ingredient adjustments
-            // So basePrice should be the size price, not product.price
-            // Let's use finalPrice - priceAdjustment to get the base (size) price
-            basePriceForCart = finalPrice - priceAdjustment;
-        }
+        // Use the basePrice passed from the customizer (which is the size price if size selected)
+        // Fall back to product.price if basePrice not provided
+        const basePriceForCart = basePrice !== undefined ? basePrice : parseFloat(product.price || 0);
         
         this.cart.push({
             cartItemId: cartItemId,

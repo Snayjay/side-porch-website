@@ -66,6 +66,14 @@
         console.log('Admin page: All script files loaded');
         console.log('Admin page: configManager exists?', typeof configManager !== 'undefined');
         console.log('Admin page: adminUI exists?', typeof adminUI !== 'undefined');
+        console.log('Admin page: window.adminUI exists?', typeof window.adminUI !== 'undefined');
+        console.log('Admin page: adminManager exists?', typeof adminManager !== 'undefined');
+        console.log('Admin page: authManager exists?', typeof authManager !== 'undefined');
+        
+        // Check for script loading errors
+        if (typeof adminUI === 'undefined' && typeof window.adminUI === 'undefined') {
+            console.error('CRITICAL: adminUI is not defined after scripts loaded. Check for JavaScript errors above.');
+        }
         
         // Initialize image generator with API key from config
         window.addEventListener('configLoaded', () => {
@@ -85,26 +93,60 @@
         (async () => {
             console.log('Admin page: Async init function starting, readyState:', document.readyState);
             console.log('Admin page: Supabase configured?', typeof configManager !== 'undefined' && configManager.isSupabaseConfigured());
+            console.log('Admin page: adminUI exists?', typeof adminUI !== 'undefined');
+            console.log('Admin page: adminManager exists?', typeof adminManager !== 'undefined');
+            console.log('Admin page: authManager exists?', typeof authManager !== 'undefined');
             
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', async () => {
-                    console.log('Admin page: DOMContentLoaded fired');
-                    if (typeof configManager !== 'undefined' && configManager.isSupabaseConfigured()) {
-                        await authManager.getCurrentUser();
-                        await adminUI.init();
+            // Wait for adminUI to be available
+            const waitForAdminUI = () => {
+                return new Promise((resolve) => {
+                    // Check both adminUI and window.adminUI
+                    if (typeof adminUI !== 'undefined' || typeof window.adminUI !== 'undefined') {
+                        resolve();
                     } else {
-                        console.error('Admin page: Supabase not configured');
-                        const container = document.getElementById('admin-content');
-                        if (container) {
-                            container.innerHTML = '<p style="text-align: center; color: var(--auburn);">Supabase is not configured. Please configure it first.</p>';
-                        }
+                        let attempts = 0;
+                        const checkInterval = setInterval(() => {
+                            attempts++;
+                            if (typeof adminUI !== 'undefined' || typeof window.adminUI !== 'undefined') {
+                                clearInterval(checkInterval);
+                                resolve();
+                            } else if (attempts > 50) {
+                                clearInterval(checkInterval);
+                                console.error('Admin page: adminUI failed to load after 5 seconds');
+                                console.error('Admin page: Check browser console for JavaScript errors in admin-ui.js');
+                                resolve(); // Resolve anyway to show error
+                            }
+                        }, 100);
                     }
                 });
-            } else {
-                console.log('Admin page: DOM already loaded, initializing immediately');
+            };
+            
+            const initAdmin = async () => {
+                await waitForAdminUI();
+                
+                // Use window.adminUI if adminUI is not defined
+                const adminUIInstance = typeof adminUI !== 'undefined' ? adminUI : (typeof window.adminUI !== 'undefined' ? window.adminUI : null);
+                
+                if (!adminUIInstance) {
+                    console.error('Admin page: adminUI is not defined. Check for JavaScript errors in admin-ui.js');
+                    const container = document.getElementById('admin-content');
+                    if (container) {
+                        container.innerHTML = '<p style="text-align: center; color: var(--auburn); padding: 2rem;">Error: Admin UI failed to load.<br><br>Please check the browser console (F12) for JavaScript errors.<br><br>Common issues:<br>- Syntax errors in admin-ui.js<br>- Missing dependencies (adminManager, authManager, etc.)<br>- Script loading order issues</p>';
+                    }
+                    return;
+                }
+                
                 if (typeof configManager !== 'undefined' && configManager.isSupabaseConfigured()) {
-                    await authManager.getCurrentUser();
-                    await adminUI.init();
+                    try {
+                        await authManager.getCurrentUser();
+                        await adminUIInstance.init();
+                    } catch (error) {
+                        console.error('Admin page: Error initializing:', error);
+                        const container = document.getElementById('admin-content');
+                        if (container) {
+                            container.innerHTML = `<p style="text-align: center; color: var(--auburn);">Error initializing admin: ${error.message}</p>`;
+                        }
+                    }
                 } else {
                     console.error('Admin page: Supabase not configured');
                     const container = document.getElementById('admin-content');
@@ -112,6 +154,13 @@
                         container.innerHTML = '<p style="text-align: center; color: var(--auburn);">Supabase is not configured. Please configure it first.</p>';
                     }
                 }
+            };
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initAdmin);
+            } else {
+                console.log('Admin page: DOM already loaded, initializing immediately');
+                initAdmin();
             }
         })();
 

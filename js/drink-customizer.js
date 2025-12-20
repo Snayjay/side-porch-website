@@ -60,7 +60,7 @@ class DrinkCustomizer {
         ];
     }
 
-    async loadDrinkIngredients(productId) {
+    async loadDrinkIngredients(productId, sizeId = null) {
         const client = getSupabaseClient();
         if (!client) {
             // Return empty for now - can add mock data later
@@ -68,7 +68,7 @@ class DrinkCustomizer {
         }
 
         try {
-            const { data, error } = await client
+            let query = client
                 .from('drink_ingredients')
                 .select(`
                     *,
@@ -76,30 +76,60 @@ class DrinkCustomizer {
                 `)
                 .eq('product_id', productId);
 
+            // If sizeId is provided, prioritize size-specific recipes
+            // Otherwise, get product-level defaults (size_id IS NULL)
+            if (sizeId) {
+                query = query.eq('size_id', sizeId);
+            } else {
+                query = query.is('size_id', null);
+            }
+
+            const { data, error } = await query;
+
             if (error) throw error;
             
-            console.log(`Loaded ${(data || []).length} drink ingredients for product ${productId}:`, data);
+            // If sizeId was provided but no size-specific recipes found, fall back to product-level defaults
+            if (sizeId && (!data || data.length === 0)) {
+                const { data: fallbackData, error: fallbackError } = await client
+                    .from('drink_ingredients')
+                    .select(`
+                        *,
+                        ingredient:ingredients(*)
+                    `)
+                    .eq('product_id', productId)
+                    .is('size_id', null);
+                
+                if (!fallbackError && fallbackData) {
+                    console.log(`No size-specific recipe found for size ${sizeId}, using product-level defaults`);
+                    return this.mapDrinkIngredients(fallbackData);
+                }
+            }
             
-            const ingredientsMap = {};
-            (data || []).forEach(di => {
-                ingredientsMap[di.ingredient_id] = {
-                    defaultAmount: parseFloat(di.default_amount),
-                    // Use recipe's unit_type if set, otherwise fall back to ingredient's default
-                    unitType: di.unit_type || di.ingredient?.unit_type,
-                    isRequired: di.is_required,
-                    isRemovable: di.is_removable,
-                    isAddable: di.is_addable,
-                    useDefaultPrice: di.use_default_price !== undefined ? di.use_default_price : true, // Default to true for backward compatibility
-                    ingredient: di.ingredient
-                };
-            });
+            console.log(`Loaded ${(data || []).length} drink ingredients for product ${productId}${sizeId ? ` (size: ${sizeId})` : ' (default)'}:`, data);
             
-            console.log('Drink ingredients map:', ingredientsMap);
-            return ingredientsMap;
+            return this.mapDrinkIngredients(data || []);
         } catch (error) {
             console.error('Load drink ingredients error:', error);
             return {};
         }
+    }
+    
+    mapDrinkIngredients(data) {
+        const ingredientsMap = {};
+        data.forEach(di => {
+            ingredientsMap[di.ingredient_id] = {
+                defaultAmount: parseFloat(di.default_amount),
+                // Use recipe's unit_type if set, otherwise fall back to ingredient's default
+                unitType: di.unit_type || di.ingredient?.unit_type,
+                isRequired: di.is_required,
+                isRemovable: di.is_removable,
+                isAddable: di.is_addable,
+                useDefaultPrice: di.use_default_price !== undefined ? di.use_default_price : true, // Default to true for backward compatibility
+                ingredient: di.ingredient
+            };
+        });
+        console.log('Drink ingredients map:', ingredientsMap);
+        return ingredientsMap;
     }
 
     async loadProductSizes(productId) {
@@ -212,13 +242,11 @@ class DrinkCustomizer {
         this.loadIngredients().then(() => {
             console.log('Loaded ingredients:', this.ingredients.length);
             return Promise.all([
-                this.loadDrinkIngredients(product.id),
-                this.loadProductSizes(product.id)
+                this.loadProductSizes(product.id),
+                this.loadDrinkIngredients(product.id, null) // Load product-level defaults as fallback
             ]);
-        }).then(([drinkIngredients, sizes]) => {
-            console.log('Setting drinkIngredients:', drinkIngredients);
+        }).then(([sizes, defaultDrinkIngredients]) => {
             console.log('Setting productSizes:', sizes);
-            this.drinkIngredients = drinkIngredients;
             this.productSizes = sizes || [];
             this.selectedSize = null; // Reset selected size
             
@@ -227,7 +255,24 @@ class DrinkCustomizer {
                 this.currentProduct.has_sizes = this.productSizes.length > 0;
             }
             
-            this.renderCustomizationContent();
+            // If product has sizes, select the first one and load its recipe
+            // Otherwise, use the default recipe
+            if (this.productSizes.length > 0) {
+                // Select first size - this will load the size-specific recipe
+                this.selectSize(this.productSizes[0].size_name, this.productSizes[0].price);
+            } else {
+                // No sizes, use default recipe
+                this.drinkIngredients = defaultDrinkIngredients;
+                // Initialize customizations with default recipe amounts
+                this.customizations = {};
+                Object.keys(this.drinkIngredients).forEach(ingredientId => {
+                    const drinkIng = this.drinkIngredients[ingredientId];
+                    if (drinkIng) {
+                        this.customizations[ingredientId] = drinkIng.defaultAmount || 0;
+                    }
+                });
+                this.renderCustomizationContent();
+            }
         });
 
         // Use event delegation for quantity buttons
@@ -640,12 +685,39 @@ class DrinkCustomizer {
         }
     }
 
-    selectSize(sizeName, sizePrice) {
+    async selectSize(sizeName, sizePrice) {
         const size = this.productSizes.find(s => s.size_name === sizeName);
         if (!size) return;
         
+        const previousSizeId = this.selectedSize?.id;
         this.selectedSize = size;
         this.basePrice = parseFloat(sizePrice);
+        
+        // If size changed, reload recipe for the new size
+        if (previousSizeId !== size.id && this.currentProduct?.id) {
+            try {
+                const sizeSpecificRecipe = await this.loadDrinkIngredients(this.currentProduct.id, size.id);
+                // Only update if we got a recipe (size-specific or fallback)
+                if (Object.keys(sizeSpecificRecipe).length > 0) {
+                    this.drinkIngredients = sizeSpecificRecipe;
+                    // Reset customizations to match the new recipe
+                    // Clear existing customizations first
+                    this.customizations = {};
+                    // Initialize customizations with new recipe amounts
+                    Object.keys(this.drinkIngredients).forEach(ingredientId => {
+                        const drinkIng = this.drinkIngredients[ingredientId];
+                        if (drinkIng) {
+                            this.customizations[ingredientId] = drinkIng.defaultAmount || 0;
+                        }
+                    });
+                    // Re-render the customization content to show updated recipe
+                    this.renderCustomizationContent();
+                }
+            } catch (error) {
+                console.error('Error loading size-specific recipe:', error);
+                // Continue with existing recipe if error occurs
+            }
+        }
         
         // Update UI
         this.renderSizeSelector();
@@ -808,6 +880,7 @@ class DrinkCustomizer {
             Object.keys(this.drinkIngredients).forEach(ingredientId => {
                 const drinkIng = this.drinkIngredients[ingredientId];
                 const amount = this.customizations[ingredientId] || 0;
+                const defaultAmount = drinkIng.defaultAmount || 0;
                 
                 // Find the ingredient details
                 let ingredient = this.ingredients.find(i => i.id === ingredientId);
@@ -815,39 +888,45 @@ class DrinkCustomizer {
                     ingredient = drinkIng.ingredient;
                 }
                 
-                if (ingredient && amount > 0) {
-                    const defaultAmount = drinkIng.defaultAmount || 0;
-                    const difference = amount - defaultAmount;
+                if (ingredient) {
                     // Use recipe's unit type if available, otherwise fall back to ingredient's default
                     const effectiveUnitType = drinkIng.unitType || ingredient.unit_type;
                     // Only charge if useDefaultPrice is true
                     // Check explicitly for false - if null/undefined, default to true for backward compatibility
                     const useDefaultPrice = drinkIng.useDefaultPrice === false ? false : true;
                     
-                    // Add to recipe ingredients list (for order label)
-                    recipeIngredients.push({
-                        ingredientId: ingredient.id,
-                        ingredientName: ingredient.name,
-                        amount: amount,
-                        unitType: effectiveUnitType,
-                        unitCost: useDefaultPrice ? parseFloat(ingredient.unit_cost || 0) : 0,
-                        isFromRecipe: true,
-                        defaultAmount: defaultAmount,
-                        useDefaultPrice: useDefaultPrice
-                    });
+                    // Add to recipe ingredients list if amount > 0 (for order label)
+                    if (amount > 0) {
+                        recipeIngredients.push({
+                            ingredientId: ingredient.id,
+                            ingredientName: ingredient.name,
+                            amount: amount,
+                            unitType: effectiveUnitType,
+                            unitCost: useDefaultPrice ? parseFloat(ingredient.unit_cost || 0) : 0,
+                            isFromRecipe: true,
+                            defaultAmount: defaultAmount,
+                            useDefaultPrice: useDefaultPrice
+                        });
+                    }
                     
-                    // Calculate price adjustment if different from default (only if useDefaultPrice is true)
-                    if (useDefaultPrice && difference !== 0) {
-                        priceAdjustment += difference * parseFloat(ingredient.unit_cost || 0);
+                    // Calculate price adjustment based on difference from default (only if useDefaultPrice is true)
+                    // This handles both increases and decreases (including removal to 0)
+                    if (useDefaultPrice) {
+                        const difference = amount - defaultAmount;
+                        if (difference !== 0) {
+                            priceAdjustment += difference * parseFloat(ingredient.unit_cost || 0);
+                        }
                     }
                 }
             });
 
             // Then, collect all additional ingredients (not in original recipe)
+            // But also check for ingredients that were in recipe but are now 0 (removed/substituted)
             this.ingredients.forEach(ingredient => {
                 const amount = this.customizations[ingredient.id] || 0;
                 const drinkIng = this.drinkIngredients[ingredient.id];
                 
+                // If ingredient was in recipe but is now 0, we already processed it above (difference will be negative)
                 // Only process if not already in recipe ingredients and amount > 0
                 if (!drinkIng && amount > 0) {
                     // New ingredient added (always uses default price for add-ins)
@@ -890,6 +969,7 @@ class DrinkCustomizer {
                 recipeIngredients: recipeIngredients, // Full recipe for order label
                 priceAdjustment: priceAdjustment,
                 finalPrice: finalPrice,
+                basePrice: this.basePrice, // Pass the base price directly
                 selectedSize: this.selectedSize ? this.selectedSize.size_name : null // Selected size name
             });
 

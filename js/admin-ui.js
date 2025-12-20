@@ -8,6 +8,7 @@ class AdminUI {
         this.editingProduct = null;
         this.editingIngredient = null;
         this.editingDrinkIngredients = null;
+        this.selectedRecipeSizeId = null; // Track selected size for recipe editing
         this.selectedCategoryType = 'drink';
         this.selectedCategoryId = null;
         this.savedSizes = []; // Store product sizes for form
@@ -322,8 +323,7 @@ class AdminUI {
                         <div style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.8;">$${parseFloat(product.price).toFixed(2)}</div>
                     </div>
                     <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
-                        <button class="btn btn-sm" onclick="adminUI.editProduct('${product.id}')">Edit</button>
-                        <button class="btn btn-sm" onclick="adminUI.manageDrinkIngredients('${product.id}')">Recipe</button>
+                        <button class="btn btn-sm" onclick="adminUI.manageDrinkIngredients('${product.id}')" style="background: var(--accent-orange); color: white;">Recipe</button>
                         <button class="btn btn-sm btn-danger" onclick="adminUI.deleteProduct('${product.id}')">Delete</button>
                     </div>
                 </div>
@@ -555,10 +555,8 @@ class AdminUI {
 
         if (productId) {
             await this.loadProductData(productId);
-        } else if (productType === 'drink') {
-            // Initialize with one empty ingredient row for new drinks
-            await this.initializeIngredientRows();
         }
+        // Recipe management is now handled separately via the Recipe button
     }
 
     async initializeIngredientRows() {
@@ -903,8 +901,9 @@ class AdminUI {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="product-price">Price *</label>
-                    <input type="number" id="product-price" step="0.01" min="0" required>
+                    <label for="product-price">Price ${isDrink ? '<span id="price-required-indicator">*</span>' : '*'}</label>
+                    <input type="number" id="product-price" step="0.01" min="0" ${isDrink ? '' : 'required'}>
+                    ${isDrink ? '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.5rem;" id="price-help-text">Required for fixed-size drinks. Optional if drink has size options (each size will have its own price).</p>' : ''}
                 </div>
                 <div class="form-group">
                     <label for="product-tax-rate">Tax Rate</label>
@@ -926,15 +925,23 @@ class AdminUI {
                             Has Size Options
                         </label>
                         <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.5rem;">
-                            Check this if the drink has multiple sizes (Small, Medium, Large). Uncheck for fixed-size drinks (e.g., Cortado).
+                            Check this if the drink has multiple size options. You can define custom sizes below (e.g., Small, Medium, Large, or any custom names). Uncheck for fixed-size drinks (e.g., Cortado).
                         </p>
                     </div>
-                    <div id="product-size-options-container" style="display: none; margin-top: 1rem; padding: 1rem; background: var(--cream); border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">
-                        <h4 style="font-size: 1rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem;">Size Options</h4>
-                        <div id="product-sizes-list" style="margin-bottom: 1rem;">
-                            <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>
+                    <div id="product-size-options-container" style="display: none; margin-top: 1rem; padding: 1.25rem; background: var(--cream); border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">
+                        <div style="margin-bottom: 1rem;">
+                            <h4 style="font-size: 1rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.5rem;">Custom Size Options</h4>
+                            <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.8; line-height: 1.5;">
+                                Define your own size options for this drink. You can add as many sizes as needed (e.g., "Small", "Medium", "Large", "Venti", "Trenta", or any custom names). Each size can have its own price and recipe.
+                            </p>
                         </div>
-                        <button type="button" class="btn btn-sm" onclick="adminUI.addProductSizeRow()" style="margin-bottom: 0.5rem;">+ Add Size</button>
+                        <div id="product-sizes-list" style="margin-bottom: 1rem;">
+                            <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below to create your first size option.</p>
+                        </div>
+                        <button type="button" class="btn btn-sm" onclick="adminUI.addProductSizeRow()" style="margin-bottom: 0.5rem; background: var(--accent-orange); color: white;">+ Add Size</button>
+                        <p style="font-size: 0.8rem; color: var(--text-dark); opacity: 0.7; margin-top: 0.75rem; font-style: italic;">
+                            💡 Tip: Use the "Order" field to control the display order of sizes. Lower numbers appear first.
+                        </p>
                     </div>
                     <div id="product-fixed-size-container" style="display: none; margin-top: 1rem;">
                         <div class="form-group">
@@ -968,26 +975,20 @@ class AdminUI {
                     </label>
                 </div>
                 ${isDrink ? `
-                    <div class="form-group" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2);">
-                        <label style="font-size: 1.1rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 1rem; display: block;">Recipe Ingredients</label>
-                        <p style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.7; margin-bottom: 1rem;">
-                            Add ingredients to build the recipe. Use "Parts" as the unit for ratio-based recipes (e.g., 1 Part Water, 2 Parts Espresso).
-                        </p>
-                        
-                        <!-- Saved Ingredients List -->
-                        <div id="saved-ingredients-list" style="margin-bottom: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem;">Saved Ingredients</h4>
-                            <div id="saved-ingredients-container" style="min-height: 2rem;">
-                                <p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No ingredients added yet. Add ingredients below.</p>
-                            </div>
-                        </div>
-                        
-                        <!-- Add New Ingredient Section -->
-                        <div style="background: var(--cream); padding: 1rem; border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2); margin-bottom: 1rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem;">Add New Ingredient</h4>
-                            <div id="new-ingredient-row" style="display: flex; gap: 0.75rem; align-items: flex-end;">
-                                <!-- New ingredient input fields will be added here -->
-                            </div>
+                    <div class="form-group" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid rgba(139, 111, 71, 0.2);">
+                        <div style="background: rgba(139, 111, 71, 0.05); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--accent-orange);">
+                            <div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.5rem; font-size: 0.95rem;">📝 Recipe Management</div>
+                            <p style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.8; margin-bottom: 0.75rem; line-height: 1.5;">
+                                ${productId ? 
+                                    'Use the <strong>"Recipe"</strong> button in the product list to manage ingredients and create size-specific recipes.' :
+                                    'After saving this product, use the <strong>"Recipe"</strong> button in the product list to manage ingredients and create size-specific recipes.'
+                                }
+                            </p>
+                            ${productId ? `
+                                <button type="button" class="btn btn-sm" onclick="this.closest('.admin-modal-overlay').remove(); adminUI.manageDrinkIngredients('${productId}');" style="margin-top: 0.5rem;">
+                                    Open Recipe Manager
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 ` : ''}
@@ -995,7 +996,6 @@ class AdminUI {
                 <div style="display: flex; gap: 1rem; justify-content: flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="this.closest('.admin-modal-overlay').remove()">Cancel</button>
                     <button type="submit" class="btn">Save</button>
-                    ${isDrink && productId ? `<button type="button" class="btn" onclick="adminUI.manageDrinkIngredients('${productId}')">Manage Recipe</button>` : ''}
                 </div>
             </form>
         `;
@@ -1070,19 +1070,33 @@ class AdminUI {
             }
             document.getElementById('product-available').checked = product.available !== false;
             
-            // Load ingredients if it's a drink
-            if (categoryType === 'drink') {
-                await this.loadDrinkIngredients(productId);
+            // Update price field requirement based on whether product has sizes
+            if (product.has_sizes) {
+                const priceInput = document.getElementById('product-price');
+                const priceRequiredIndicator = document.getElementById('price-required-indicator');
+                const priceHelpText = document.getElementById('price-help-text');
+                
+                if (priceInput) {
+                    priceInput.required = false;
+                }
+                if (priceRequiredIndicator) {
+                    priceRequiredIndicator.style.display = 'none';
+                }
+                if (priceHelpText) {
+                    priceHelpText.textContent = 'Optional - each size will have its own price. Leave blank if using size options.';
+                }
             }
+            
+            // Recipe management is now handled separately via the Recipe button
         }
     }
 
-    async loadDrinkIngredients(productId) {
+    async loadDrinkIngredients(productId, sizeId = null) {
         // Initialize ingredient rows first
         await this.initializeIngredientRows();
         
-        // Load existing drink ingredients
-        const drinkIngredientsResult = await adminManager.getDrinkIngredients(productId);
+        // Load existing drink ingredients (product-level defaults if no sizeId)
+        const drinkIngredientsResult = await adminManager.getDrinkIngredients(productId, sizeId);
         const drinkIngredients = drinkIngredientsResult.drinkIngredients || [];
         
         if (drinkIngredients.length === 0) {
@@ -1148,18 +1162,43 @@ class AdminUI {
                 return;
             }
 
-            const price = document.getElementById('product-price').value;
-            if (!price || parseFloat(price) < 0) {
+            const priceInput = document.getElementById('product-price');
+            const price = priceInput.value;
+            
+            // Check if product has sizes - if so, price is optional
+            const hasSizesCheckbox = document.getElementById('product-has-sizes');
+            const hasSizes = hasSizesCheckbox && hasSizesCheckbox.checked;
+            
+            // Also check if sizes actually exist in the form
+            const sizesContainer = document.getElementById('product-sizes-list');
+            const sizeRows = sizesContainer ? sizesContainer.querySelectorAll('.product-size-row') : [];
+            const hasActualSizes = sizeRows.length > 0;
+            
+            // Price is required if: not a drink OR (drink AND no sizes)
+            const priceRequired = !hasSizes && !hasActualSizes;
+            
+            if (priceRequired && (!price || parseFloat(price) < 0)) {
                 errorDiv.textContent = 'Please enter a valid price';
                 errorDiv.style.display = 'block';
                 return;
             }
+            
+            // If price is provided, validate it's not negative
+            if (price && parseFloat(price) < 0) {
+                errorDiv.textContent = 'Price cannot be negative';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            // If drink has sizes but no price, use 0 as default (sizes will have their own prices)
+            // If no sizes, price is required and should already be validated above
+            const finalPrice = (hasSizes || hasActualSizes) ? (price || '0') : price;
 
             const productData = {
                 name: name,
                 description: document.getElementById('product-description').value.trim(),
                 category_id: categoryId,
-                price: price,
+                price: finalPrice || '0', // Use finalPrice which handles size-based pricing
                 tax_rate: document.getElementById('product-tax-rate').value,
                 image_url: document.getElementById('product-image-url')?.value.trim() || null,
                 available: document.getElementById('product-available').checked
@@ -1172,15 +1211,8 @@ class AdminUI {
             }
 
             // Add size fields for drinks
-            const hasSizesCheckbox = document.getElementById('product-has-sizes');
+            // Reuse hasSizesCheckbox, hasSizes, sizesContainer, sizeRows, and hasActualSizes already declared above
             if (hasSizesCheckbox) {
-                const hasSizes = hasSizesCheckbox.checked;
-                
-                // Check if sizes actually exist in the form (even if checkbox wasn't checked)
-                const sizesContainer = document.getElementById('product-sizes-list');
-                const sizeRows = sizesContainer ? sizesContainer.querySelectorAll('.product-size-row') : [];
-                const hasActualSizes = sizeRows.length > 0;
-                
                 // Set has_sizes to true if checkbox is checked OR if sizes exist
                 productData.has_sizes = hasSizes || hasActualSizes;
                 
@@ -1228,20 +1260,8 @@ class AdminUI {
                     }
                 }
                 
-                // Save ingredients if it's a drink
-                const savedIngredientsContainer = document.getElementById('saved-ingredients-container');
-                if (savedIngredientsContainer && productId) {
-                    try {
-                        console.log('Saving ingredients for product:', productId);
-                        await this.saveDrinkIngredientsFromForm(productId);
-                        console.log('Ingredients saved successfully');
-                    } catch (error) {
-                        console.error('Error saving ingredients:', error);
-                        errorDiv.textContent = `Item saved but failed to save ingredients: ${error.message}`;
-                        errorDiv.style.display = 'block';
-                        return; // Don't close modal if ingredients failed to save
-                    }
-                }
+                // Recipe management is now handled separately via the Recipe button
+                // No need to save ingredients here
                 
                 document.querySelector('.admin-modal-overlay')?.remove();
                 await this.renderMenuManagementView();
@@ -1294,6 +1314,9 @@ class AdminUI {
         const sizeOptionsContainer = document.getElementById('product-size-options-container');
         const fixedSizeContainer = document.getElementById('product-fixed-size-container');
         const fixedSizeInput = document.getElementById('product-fixed-size-oz');
+        const priceInput = document.getElementById('product-price');
+        const priceRequiredIndicator = document.getElementById('price-required-indicator');
+        const priceHelpText = document.getElementById('price-help-text');
         
         if (!hasSizesCheckbox) return;
         
@@ -1310,6 +1333,56 @@ class AdminUI {
         if (fixedSizeInput) {
             fixedSizeInput.required = !hasSizes;
         }
+        
+        // Update price field requirement based on size options
+        if (priceInput) {
+            priceInput.required = !hasSizes;
+        }
+        
+        // Update price label indicator
+        if (priceRequiredIndicator) {
+            priceRequiredIndicator.style.display = hasSizes ? 'none' : 'inline';
+        }
+        
+        // Update help text
+        if (priceHelpText) {
+            if (hasSizes) {
+                priceHelpText.textContent = 'Optional - each size will have its own price. Leave blank if using size options.';
+                priceHelpText.style.color = 'var(--text-dark)';
+                priceHelpText.style.opacity = '0.7';
+            } else {
+                priceHelpText.textContent = 'Required for fixed-size drinks. Optional if drink has size options (each size will have its own price).';
+                priceHelpText.style.color = 'var(--text-dark)';
+                priceHelpText.style.opacity = '0.7';
+            }
+        }
+    }
+
+    getProductSizeRowHTML(sizeData = null) {
+        const rowId = 'size-row-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        return `
+            <div id="${rowId}" class="product-size-row" style="display: flex; gap: 0.75rem; align-items: flex-end; margin-bottom: 0.75rem; padding: 0.75rem; background: var(--parchment); border-radius: 6px; border: 1px solid rgba(139, 111, 71, 0.2);">
+                <div style="flex: 1;">
+                    <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Size Name</label>
+                    <input type="text" class="size-name" value="${sizeData?.size_name || ''}" placeholder="e.g., Small, Medium, Large, Venti..." style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;" required>
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Size (oz)</label>
+                    <input type="number" class="size-oz" step="0.1" min="0.1" value="${sizeData?.size_oz || ''}" placeholder="8.0" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Price</label>
+                    <input type="number" class="size-price" step="0.01" min="0" value="${sizeData?.price || ''}" placeholder="3.50" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                </div>
+                <div style="flex: 0 0 80px;">
+                    <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Order</label>
+                    <input type="number" class="size-display-order" step="1" min="0" value="${sizeData?.display_order || 0}" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                </div>
+                <div style="flex: 0 0 auto; padding-bottom: 0.5rem;">
+                    <button type="button" onclick="adminUI.removeRecipeProductSizeRow('${rowId}')" style="background: var(--auburn); color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.9rem;" title="Remove size">✕</button>
+                </div>
+            </div>
+        `;
     }
 
     addProductSizeRow(sizeData = null) {
@@ -1326,7 +1399,7 @@ class AdminUI {
         row.innerHTML = `
             <div style="flex: 1;">
                 <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Size Name</label>
-                <input type="text" class="size-name" value="${sizeData?.size_name || ''}" placeholder="e.g., Small" style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;">
+                <input type="text" class="size-name" value="${sizeData?.size_name || ''}" placeholder="e.g., Small, Medium, Large, Venti..." style="width: 100%; padding: 0.5rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 6px; font-size: 0.9rem;" required>
             </div>
             <div style="flex: 1;">
                 <label style="font-size: 0.85rem; color: var(--deep-brown); margin-bottom: 0.25rem; display: block;">Size (oz)</label>
@@ -1429,6 +1502,210 @@ class AdminUI {
         }
     }
 
+    // Recipe dialog size management functions
+    toggleSizeManagement() {
+        const content = document.getElementById('size-management-content');
+        const icon = document.getElementById('size-management-icon');
+        if (content && icon) {
+            const isVisible = content.style.display !== 'none';
+            content.style.display = isVisible ? 'none' : 'block';
+            icon.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+    }
+
+    addRecipeProductSizeRow() {
+        const container = document.getElementById('recipe-product-sizes-list');
+        if (!container) return;
+        
+        const placeholder = container.querySelector('p');
+        if (placeholder && placeholder.textContent.includes('No sizes added')) {
+            container.innerHTML = '';
+        }
+        
+        container.insertAdjacentHTML('beforeend', this.getProductSizeRowHTML());
+    }
+
+    removeRecipeProductSizeRow(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) {
+            row.remove();
+        }
+        
+        // Show placeholder if no sizes left
+        const container = document.getElementById('recipe-product-sizes-list');
+        if (container && container.children.length === 0) {
+            container.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>';
+        }
+    }
+
+    async saveRecipeProductSizes(productId) {
+        const container = document.getElementById('recipe-product-sizes-list');
+        if (!container) {
+            errorDialog.show('Size management container not found', 'Error');
+            return;
+        }
+        
+        const sizeRows = container.querySelectorAll('.product-size-row');
+        const sizes = [];
+        
+        sizeRows.forEach(row => {
+            const sizeName = row.querySelector('.size-name')?.value.trim();
+            const sizeOz = row.querySelector('.size-oz')?.value;
+            const price = row.querySelector('.size-price')?.value;
+            const displayOrder = row.querySelector('.size-display-order')?.value;
+            
+            if (sizeName && sizeOz && price) {
+                sizes.push({
+                    size_name: sizeName,
+                    size_oz: parseFloat(sizeOz),
+                    price: parseFloat(price),
+                    display_order: parseInt(displayOrder || 0),
+                    available: true
+                });
+            }
+        });
+        
+        try {
+            // Save sizes
+            const result = await adminManager.setProductSizes(productId, sizes);
+            if (!result.success) {
+                errorDialog.show(result.error || 'Failed to save sizes', 'Error');
+                return;
+            }
+            
+            // Update product's has_sizes flag
+            const productResult = await adminManager.getAllProducts(true);
+            const product = productResult.products?.find(p => p.id === productId);
+            if (product) {
+                const hasSizes = sizes.length > 0;
+                if (product.has_sizes !== hasSizes) {
+                    const updateResult = await adminManager.updateProduct(productId, { has_sizes: hasSizes });
+                    if (!updateResult.success) {
+                        console.warn('Failed to update has_sizes flag:', updateResult.error);
+                    }
+                }
+            }
+            
+            // Reload sizes and refresh the recipe dialog
+            const sizesResult = await adminManager.getProductSizes(productId);
+            const productSizes = sizesResult.success ? sizesResult.sizes : [];
+            
+            // Update the size list display in the "Manage Size Options" section
+            const sizeListContainer = document.getElementById('recipe-product-sizes-list');
+            if (sizeListContainer) {
+                if (productSizes.length === 0) {
+                    sizeListContainer.innerHTML = '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>';
+                } else {
+                    sizeListContainer.innerHTML = '';
+                    productSizes.forEach(size => {
+                        sizeListContainer.insertAdjacentHTML('beforeend', this.getProductSizeRowHTML(size));
+                    });
+                }
+            }
+            
+            // Reload all recipes to update the summary
+            const allRecipesResult = await adminManager.getAllDrinkRecipes(productId);
+            const existingRecipes = allRecipesResult.success ? allRecipesResult.recipesBySize : {};
+            
+            // Update recipe summary
+            await this.updateRecipeSummary(productId, productSizes);
+            
+            // Update or create size selector dropdown
+            let sizeSelector = document.getElementById('recipe-size-selector');
+            let sizeSelectorSection = sizeSelector?.closest('div[style*="linear-gradient"]');
+            
+            // If sizes exist but selector section doesn't, create it
+            if (productSizes.length > 0 && !sizeSelectorSection) {
+                // Find the info message or size management section to insert after
+                const sizeManagementSection = document.getElementById('size-management-content')?.parentElement;
+                const infoMessage = document.querySelector('div[style*="rgba(255, 193, 7, 0.1)"]');
+                const insertAfter = sizeManagementSection || infoMessage;
+                
+                if (insertAfter) {
+                    const defaultRecipeExists = existingRecipes['default'] && existingRecipes['default'].ingredient_count > 0;
+                    const defaultIndicator = defaultRecipeExists ? ' ✓' : '';
+                    
+                    // Create the size selector section
+                    const newSection = document.createElement('div');
+                    newSection.style.cssText = 'margin-bottom: 1.5rem; padding: 1.25rem; background: linear-gradient(135deg, var(--cream) 0%, rgba(139, 111, 71, 0.05) 100%); border-radius: 8px; border: 2px solid rgba(139, 111, 71, 0.3); box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
+                    newSection.innerHTML = `
+                        <label style="display: block; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 1.1rem;">📏 Select Size to Edit Recipe:</label>
+                        <select id="recipe-size-selector" style="width: 100%; padding: 0.75rem; font-size: 1rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; background: white; cursor: pointer; font-weight: 500;">
+                            <option value="">Default Recipe (applies to all sizes unless overridden)${defaultIndicator}</option>
+                        </select>
+                        <div id="recipe-size-display" style="margin-top: 0.75rem; font-size: 0.95rem; color: var(--deep-brown); font-weight: 500; padding: 0.75rem; background: rgba(139, 111, 71, 0.15); border-radius: 4px; border-left: 4px solid var(--accent-orange);">✓ Editing default recipe (applies to all sizes unless overridden)</div>
+                        <div style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-dark); opacity: 0.8; padding: 0.5rem; background: rgba(139, 111, 71, 0.05); border-radius: 4px;">💡 <strong>Tip:</strong> Select a size from the dropdown above to create/edit a size-specific recipe. If no size-specific recipe exists, the default recipe will be used for that size. Checkmarks (✓) indicate existing recipes.</div>
+                    `;
+                    
+                    // Insert after the size management section or info message
+                    insertAfter.insertAdjacentElement('afterend', newSection);
+                    sizeSelectorSection = newSection;
+                    sizeSelector = document.getElementById('recipe-size-selector');
+                    
+                    // Set up size selector change handler
+                    if (sizeSelector) {
+                        const ingredientsResult = await adminManager.getAllIngredients(true);
+                        const allIngredients = ingredientsResult.ingredients || [];
+                        
+                        sizeSelector.addEventListener('change', async (e) => {
+                            const selectedSizeId = e.target.value || null;
+                            const sizeDisplay = document.getElementById('recipe-size-display');
+                            if (sizeDisplay) {
+                                sizeDisplay.textContent = 'Loading recipe...';
+                            }
+                            await this.loadRecipeForSize(productId, selectedSizeId, allIngredients);
+                            await this.updateRecipeSummary(productId, productSizes);
+                        });
+                    }
+                }
+            }
+            
+            // Update size selector dropdown
+            if (sizeSelector) {
+                const defaultRecipeExists = existingRecipes['default'] && existingRecipes['default'].ingredient_count > 0;
+                const defaultIndicator = defaultRecipeExists ? ' ✓' : '';
+                
+                // Clear and rebuild dropdown
+                sizeSelector.innerHTML = `<option value="">Default Recipe (applies to all sizes unless overridden)${defaultIndicator}</option>`;
+                
+                productSizes.forEach(size => {
+                    const sizeRecipe = existingRecipes[size.id];
+                    const hasRecipe = sizeRecipe && sizeRecipe.ingredient_count > 0;
+                    const indicator = hasRecipe ? ' ✓' : '';
+                    const option = document.createElement('option');
+                    option.value = size.id;
+                    option.textContent = `${size.size_name} (${size.size_oz} oz)${indicator}`;
+                    sizeSelector.appendChild(option);
+                });
+            }
+            
+            // Show/hide size selector section based on whether sizes exist
+            if (sizeSelectorSection) {
+                if (productSizes.length === 0) {
+                    sizeSelectorSection.style.display = 'none';
+                } else {
+                    sizeSelectorSection.style.display = 'block';
+                }
+            }
+            
+            // Update the info message
+            const infoMessage = document.querySelector('div[style*="rgba(255, 193, 7, 0.1)"]');
+            if (infoMessage) {
+                if (productSizes.length === 0) {
+                    infoMessage.style.display = 'block';
+                    infoMessage.innerHTML = 'ℹ️ This product does not have size options. Use "Manage Size Options" above to add sizes, or the recipe will apply to the product as a whole.';
+                } else {
+                    infoMessage.style.display = 'none';
+                }
+            }
+            
+            errorDialog.showSuccess(`Sizes saved successfully! ${sizes.length} size${sizes.length !== 1 ? 's' : ''} configured.`, 'Success');
+        } catch (error) {
+            console.error('Error saving recipe product sizes:', error);
+            errorDialog.show(error.message || 'Failed to save sizes', 'Error');
+        }
+    }
+
     async editProduct(productId) {
         const result = await adminManager.getAllProducts(true);
         const product = result.products?.find(p => p.id === productId);
@@ -1454,13 +1731,29 @@ class AdminUI {
 
     async manageDrinkIngredients(productId) {
         this.editingDrinkIngredients = productId;
+        this.selectedRecipeSizeId = null; // Reset selected size
         const productResult = await adminManager.getAllProducts(true);
         const product = productResult.products?.find(p => p.id === productId);
+        
+        // Always try to load product sizes (in case product has sizes but flag isn't set)
+        let productSizes = [];
+        const sizesResult = await adminManager.getProductSizes(productId);
+        if (sizesResult.success && sizesResult.sizes && sizesResult.sizes.length > 0) {
+            productSizes = sizesResult.sizes;
+            console.log(`Found ${productSizes.length} sizes for product ${productId}:`, productSizes);
+        } else {
+            console.log(`No sizes found for product ${productId} (has_sizes: ${product?.has_sizes})`);
+        }
+        
+        // Load all existing recipes to show which sizes have recipes
+        const allRecipesResult = await adminManager.getAllDrinkRecipes(productId);
+        const existingRecipes = allRecipesResult.success ? allRecipesResult.recipesBySize : {};
         
         const ingredientsResult = await adminManager.getAllIngredients(true);
         const allIngredients = ingredientsResult.ingredients || [];
 
-        const drinkIngredientsResult = await adminManager.getDrinkIngredients(productId);
+        // Load product-level default recipe (sizeId = null)
+        const drinkIngredientsResult = await adminManager.getDrinkIngredients(productId, null);
         const drinkIngredients = drinkIngredientsResult.drinkIngredients || [];
         const drinkIngredientMap = {};
         drinkIngredients.forEach(di => {
@@ -1469,12 +1762,291 @@ class AdminUI {
 
         const modal = this.createModal(
             `Manage Recipe: ${product?.name || 'Drink'}`,
-            await this.getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap)
+            await this.getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap, productSizes, productId, existingRecipes)
         );
         document.body.appendChild(modal);
+        
+        // Set up size selector change handler
+        const sizeSelector = document.getElementById('recipe-size-selector');
+        if (sizeSelector) {
+            console.log('Size selector found, setting up change handler');
+            sizeSelector.addEventListener('change', async (e) => {
+                const selectedSizeId = e.target.value || null;
+                console.log('Size selector changed to:', selectedSizeId);
+                // Show loading state
+                const sizeDisplay = document.getElementById('recipe-size-display');
+                if (sizeDisplay) {
+                    sizeDisplay.textContent = 'Loading recipe...';
+                }
+                await this.loadRecipeForSize(productId, selectedSizeId, allIngredients);
+                // Refresh recipe summary after loading
+                await this.updateRecipeSummary(productId, productSizes);
+            });
+        } else {
+            console.log('No size selector found - product may not have sizes');
+        }
+        
+        // Set up custom price toggle handlers for all ingredients
+        allIngredients.forEach(ing => {
+            const checkbox = document.getElementById(`ing-${ing.id}-use-default-price`);
+            if (checkbox) {
+                // Set initial state
+                this.toggleCustomPrice(ing.id);
+            }
+            
+            // Set up required checkbox change handler to update recipe list
+            const requiredCheckbox = document.getElementById(`ing-${ing.id}-required`);
+            if (requiredCheckbox) {
+                requiredCheckbox.addEventListener('change', () => {
+                    this.updateRecipeList();
+                });
+            }
+        });
+        
+        // Initial recipe list update
+        await this.updateRecipeList();
+    }
+    
+    async updateRecipeSummary(productId, productSizes) {
+        // Reload all recipes to update the summary
+        const allRecipesResult = await adminManager.getAllDrinkRecipes(productId);
+        const existingRecipes = allRecipesResult.success ? allRecipesResult.recipesBySize : {};
+        
+        // Find and update the recipe summary section
+        const summaryContainer = document.querySelector('[data-recipe-summary]');
+        if (summaryContainer) {
+            const defaultRecipeExists = existingRecipes['default'] && existingRecipes['default'].ingredient_count > 0;
+            
+            let html = '<div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 0.95rem;">📋 Existing Recipes:</div>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">';
+            
+            // Show default recipe status
+            if (defaultRecipeExists) {
+                const defaultRecipe = existingRecipes['default'];
+                html += `<span style="padding: 0.4rem 0.75rem; background: rgba(76, 175, 80, 0.15); color: #2e7d32; border-radius: 6px; font-size: 0.85rem; font-weight: 500; border: 1px solid rgba(76, 175, 80, 0.3);">✓ Default Recipe (${defaultRecipe.ingredient_count} ingredient${defaultRecipe.ingredient_count !== 1 ? 's' : ''})</span>`;
+            } else {
+                html += `<span style="padding: 0.4rem 0.75rem; background: rgba(158, 158, 158, 0.15); color: #616161; border-radius: 6px; font-size: 0.85rem; border: 1px solid rgba(158, 158, 158, 0.3);">○ Default Recipe (none)</span>`;
+            }
+            
+            // Show size-specific recipe status
+            if (productSizes && productSizes.length > 0) {
+                productSizes.forEach(size => {
+                    const sizeRecipe = existingRecipes[size.id];
+                    if (sizeRecipe && sizeRecipe.ingredient_count > 0) {
+                        html += `<span style="padding: 0.4rem 0.75rem; background: rgba(76, 175, 80, 0.15); color: #2e7d32; border-radius: 6px; font-size: 0.85rem; font-weight: 500; border: 1px solid rgba(76, 175, 80, 0.3);">✓ ${size.size_name} (${sizeRecipe.ingredient_count} ingredient${sizeRecipe.ingredient_count !== 1 ? 's' : ''})</span>`;
+                    } else {
+                        html += `<span style="padding: 0.4rem 0.75rem; background: rgba(158, 158, 158, 0.15); color: #616161; border-radius: 6px; font-size: 0.85rem; border: 1px solid rgba(158, 158, 158, 0.3);">○ ${size.size_name} (none)</span>`;
+                    }
+                });
+            }
+            
+            html += '</div>';
+            summaryContainer.innerHTML = html;
+        }
+        
+        // Also update dropdown indicators
+        const sizeSelector = document.getElementById('recipe-size-selector');
+        if (sizeSelector && productSizes && productSizes.length > 0) {
+            const defaultRecipeExists = existingRecipes['default'] && existingRecipes['default'].ingredient_count > 0;
+            
+            // Update default option
+            sizeSelector.options[0].text = `Default Recipe (applies to all sizes unless overridden)${defaultRecipeExists ? ' ✓' : ''}`;
+            
+            // Update size options
+            productSizes.forEach((size, index) => {
+                const sizeRecipe = existingRecipes[size.id];
+                const hasRecipe = sizeRecipe && sizeRecipe.ingredient_count > 0;
+                const optionIndex = index + 1; // +1 because default is at index 0
+                if (sizeSelector.options[optionIndex]) {
+                    sizeSelector.options[optionIndex].text = `${size.size_name} (${size.size_oz} oz)${hasRecipe ? ' ✓' : ''}`;
+                }
+            });
+        }
+    }
+    
+    toggleCustomPrice(ingredientId) {
+        const checkbox = document.getElementById(`ing-${ingredientId}-use-default-price`);
+        const container = document.getElementById(`ing-${ingredientId}-custom-price-container`);
+        
+        if (checkbox && container) {
+            const useDefaultPrice = checkbox.checked;
+            container.style.display = useDefaultPrice ? 'none' : 'flex';
+        }
     }
 
-    async getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap) {
+    async updateRecipeList() {
+        const container = document.getElementById('recipe-list-container');
+        const countElement = document.getElementById('recipe-list-count');
+        if (!container) return;
+        
+        // Get all ingredients
+        const ingredientsResult = await adminManager.getAllIngredients(true);
+        const allIngredients = ingredientsResult.ingredients || [];
+        
+        // Find ingredients with amount > 0
+        const recipeIngredients = [];
+        allIngredients.forEach(ing => {
+            const amountInput = document.getElementById(`ing-${ing.id}-amount`);
+            const unitSelect = document.getElementById(`ing-${ing.id}-unit-type`);
+            const requiredCheckbox = document.getElementById(`ing-${ing.id}-required`);
+            
+            if (amountInput) {
+                const amount = parseFloat(amountInput.value || 0);
+                if (amount > 0 || (requiredCheckbox && requiredCheckbox.checked)) {
+                    const unitType = unitSelect?.value || ing.unit_type || 'parts';
+                    const isRequired = requiredCheckbox?.checked || false;
+                    recipeIngredients.push({
+                        id: ing.id,
+                        name: ing.name,
+                        amount: amount,
+                        unitType: unitType,
+                        isRequired: isRequired,
+                        category: ing.category
+                    });
+                }
+            }
+        });
+        
+        // Update count
+        if (countElement) {
+            countElement.textContent = `${recipeIngredients.length} ingredient${recipeIngredients.length !== 1 ? 's' : ''}`;
+        }
+        
+        // Update container
+        if (recipeIngredients.length === 0) {
+            container.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.6; font-style: italic; text-align: center; padding: 1rem 0;">No ingredients added yet. Increase ingredient amounts above to add them to the recipe.</p>';
+        } else {
+            // Group by category
+            const categories = {
+                base_drinks: { name: 'Base Drinks', ingredients: [] },
+                sugars: { name: 'Sugars', ingredients: [] },
+                liquid_creamers: { name: 'Liquid Creamers', ingredients: [] },
+                toppings: { name: 'Toppings', ingredients: [] },
+                add_ins: { name: 'Add-ins', ingredients: [] }
+            };
+            
+            recipeIngredients.forEach(ing => {
+                const cat = categories[ing.category] || categories.add_ins;
+                cat.ingredients.push(ing);
+            });
+            
+            let html = '';
+            Object.values(categories).forEach(category => {
+                if (category.ingredients.length === 0) return;
+                
+                html += `<div style="margin-bottom: 0.75rem;">`;
+                html += `<div style="font-size: 0.85rem; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.5rem; opacity: 0.8;">${category.name}</div>`;
+                
+                category.ingredients.forEach(ing => {
+                    // Get the display unit name (singular form for special cases)
+                    let unitDisplay = ing.unitType;
+                    if (ing.unitType === 'shots') {
+                        unitDisplay = 'shot';
+                    } else if (ing.unitType === 'pumps') {
+                        unitDisplay = 'pump';
+                    }
+                    
+                    // Determine if we need to pluralize
+                    // Units that are already plural or don't need pluralization: parts, ounces, teaspoons, tablespoons, etc.
+                    const pluralUnits = ['parts', 'ounces', 'teaspoons', 'tablespoons', 'cups', 'pints', 'quarts', 'gallons'];
+                    const needsPluralization = !pluralUnits.includes(ing.unitType.toLowerCase()) && ing.amount !== 1;
+                    
+                    const unitText = needsPluralization ? `${unitDisplay}s` : unitDisplay;
+                    
+                    html += `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; margin-bottom: 0.25rem; background: rgba(139, 111, 71, 0.05); border-radius: 4px; border-left: 3px solid ${ing.isRequired ? 'var(--auburn)' : 'rgba(139, 111, 71, 0.3)'};">
+                            <div style="flex: 1;">
+                                <span style="font-weight: 500; color: var(--deep-brown); font-size: 0.9rem;">${ing.name}</span>
+                                ${ing.isRequired ? '<span style="font-size: 0.75rem; color: var(--auburn); margin-left: 0.5rem; font-weight: 600;">REQUIRED</span>' : ''}
+                            </div>
+                            <div style="font-size: 0.9rem; color: var(--text-dark); font-weight: 500;">
+                                ${ing.amount} ${unitText}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            });
+            
+            container.innerHTML = html;
+        }
+    }
+    
+    async loadRecipeForSize(productId, sizeId, allIngredients) {
+        this.selectedRecipeSizeId = sizeId;
+        console.log(`Loading recipe for product ${productId}, sizeId: ${sizeId || 'null (default)'}`);
+        
+        // Load recipe for the selected size (or product-level if sizeId is null)
+        const drinkIngredientsResult = await adminManager.getDrinkIngredients(productId, sizeId);
+        const drinkIngredients = drinkIngredientsResult.drinkIngredients || [];
+        console.log(`Loaded ${drinkIngredients.length} ingredients for size ${sizeId || 'default'}`);
+        
+        const drinkIngredientMap = {};
+        drinkIngredients.forEach(di => {
+            drinkIngredientMap[di.ingredient_id] = di;
+        });
+        
+        // Update form fields with the loaded recipe
+        let updatedCount = 0;
+        allIngredients.forEach(ing => {
+            const di = drinkIngredientMap[ing.id];
+            const amountInput = document.getElementById(`ing-${ing.id}-amount`);
+            const unitSelect = document.getElementById(`ing-${ing.id}-unit-type`);
+            const requiredCheckbox = document.getElementById(`ing-${ing.id}-required`);
+            const removableCheckbox = document.getElementById(`ing-${ing.id}-removable`);
+            const addableCheckbox = document.getElementById(`ing-${ing.id}-addable`);
+            const useDefaultPriceCheckbox = document.getElementById(`ing-${ing.id}-use-default-price`);
+            const customPriceInput = document.getElementById(`ing-${ing.id}-custom-price`);
+            const customPriceContainer = document.getElementById(`ing-${ing.id}-custom-price-container`);
+            
+            if (amountInput) {
+                amountInput.value = di?.default_amount || 0;
+                updatedCount++;
+            }
+            if (unitSelect) {
+                const savedUnitType = di?.unit_type || ing.unit_type || 'parts';
+                unitSelect.value = savedUnitType;
+            }
+            if (requiredCheckbox) requiredCheckbox.checked = di?.is_required || false;
+            if (removableCheckbox) removableCheckbox.checked = di?.is_removable !== false;
+            if (addableCheckbox) addableCheckbox.checked = di?.is_addable !== false;
+            if (useDefaultPriceCheckbox) {
+                useDefaultPriceCheckbox.checked = di?.use_default_price !== false;
+                // Update custom price container visibility
+                if (customPriceContainer) {
+                    customPriceContainer.style.display = useDefaultPriceCheckbox.checked ? 'none' : 'flex';
+                }
+            }
+            if (customPriceInput) {
+                customPriceInput.value = (di?.custom_price !== null && di?.custom_price !== undefined) ? parseFloat(di.custom_price).toFixed(2) : '';
+            }
+        });
+        console.log(`Updated ${updatedCount} ingredient fields`);
+        
+        // Update size selector display
+        const sizeSelector = document.getElementById('recipe-size-selector');
+        if (sizeSelector) {
+            const sizeDisplay = document.getElementById('recipe-size-display');
+            if (sizeDisplay) {
+                if (sizeId) {
+                    const sizeOption = sizeSelector.options[sizeSelector.selectedIndex];
+                    sizeDisplay.innerHTML = `✓ Editing recipe for: <strong>${sizeOption.text}</strong>`;
+                    sizeDisplay.style.background = 'rgba(76, 175, 80, 0.15)';
+                    sizeDisplay.style.borderLeftColor = '#4caf50';
+                } else {
+                    sizeDisplay.innerHTML = '✓ Editing default recipe (applies to all sizes unless overridden)';
+                    sizeDisplay.style.background = 'rgba(139, 111, 71, 0.15)';
+                    sizeDisplay.style.borderLeftColor = 'var(--accent-orange)';
+                }
+            }
+        }
+        
+        // Update recipe list after loading
+        await this.updateRecipeList();
+    }
+
+    async getDrinkIngredientsFormHTML(allIngredients, drinkIngredientMap, productSizes = [], productId = null, existingRecipes = {}) {
         // Load unit types for the unit selector
         const unitTypesResult = await adminManager.getAllUnitTypes(true);
         const unitTypes = unitTypesResult.unitTypes || [];
@@ -1492,7 +2064,106 @@ class AdminUI {
             cat.ingredients.push(ing);
         });
 
-        let html = '<div style="max-height: 60vh; overflow-y: auto;">';
+        let html = '';
+        
+        // Add recipe summary section showing which recipes exist
+        const defaultRecipeExists = existingRecipes['default'] && existingRecipes['default'].ingredient_count > 0;
+        const hasSizeRecipes = Object.keys(existingRecipes).some(key => key !== 'default' && existingRecipes[key].ingredient_count > 0);
+        
+        if (productSizes && productSizes.length > 0 || defaultRecipeExists || Object.keys(existingRecipes).length > 0) {
+            html += '<div data-recipe-summary style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(139, 111, 71, 0.08); border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">';
+            html += '<div style="font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 0.95rem;">📋 Existing Recipes:</div>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">';
+            
+            // Show default recipe status
+            if (defaultRecipeExists) {
+                const defaultRecipe = existingRecipes['default'];
+                html += `<span style="padding: 0.4rem 0.75rem; background: rgba(76, 175, 80, 0.15); color: #2e7d32; border-radius: 6px; font-size: 0.85rem; font-weight: 500; border: 1px solid rgba(76, 175, 80, 0.3);">✓ Default Recipe (${defaultRecipe.ingredient_count} ingredient${defaultRecipe.ingredient_count !== 1 ? 's' : ''})</span>`;
+            } else {
+                html += `<span style="padding: 0.4rem 0.75rem; background: rgba(158, 158, 158, 0.15); color: #616161; border-radius: 6px; font-size: 0.85rem; border: 1px solid rgba(158, 158, 158, 0.3);">○ Default Recipe (none)</span>`;
+            }
+            
+            // Show size-specific recipe status
+            if (productSizes && productSizes.length > 0) {
+                productSizes.forEach(size => {
+                    const sizeRecipe = existingRecipes[size.id];
+                    if (sizeRecipe && sizeRecipe.ingredient_count > 0) {
+                        html += `<span style="padding: 0.4rem 0.75rem; background: rgba(76, 175, 80, 0.15); color: #2e7d32; border-radius: 6px; font-size: 0.85rem; font-weight: 500; border: 1px solid rgba(76, 175, 80, 0.3);">✓ ${size.size_name} (${sizeRecipe.ingredient_count} ingredient${sizeRecipe.ingredient_count !== 1 ? 's' : ''})</span>`;
+                    } else {
+                        html += `<span style="padding: 0.4rem 0.75rem; background: rgba(158, 158, 158, 0.15); color: #616161; border-radius: 6px; font-size: 0.85rem; border: 1px solid rgba(158, 158, 158, 0.3);">○ ${size.size_name} (none)</span>`;
+                    }
+                });
+            }
+            
+            html += '</div>';
+            html += '</div>';
+        }
+        
+        // Add size management section (collapsible)
+        html += '<div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(139, 111, 71, 0.08); border-radius: 8px; border: 1px solid rgba(139, 111, 71, 0.2);">';
+        html += '<button type="button" id="toggle-size-management" onclick="adminUI.toggleSizeManagement()" style="width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 0.75rem; cursor: pointer; font-size: 1rem; font-weight: 600; color: var(--deep-brown);">';
+        html += '<span>📏 Manage Size Options</span>';
+        html += '<span id="size-management-icon" style="font-size: 1.2rem; transition: transform 0.2s;">▼</span>';
+        html += '</button>';
+        html += '<div id="size-management-content" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(139, 111, 71, 0.2);">';
+        html += '<div style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-dark); opacity: 0.8;">Define custom sizes for this product. Each size can have its own recipe and price.</div>';
+        html += '<div id="recipe-product-sizes-list" style="margin-bottom: 1rem;">';
+        if (productSizes && productSizes.length > 0) {
+            productSizes.forEach(size => {
+                html += this.getProductSizeRowHTML(size);
+            });
+        } else {
+            html += '<p style="font-size: 0.85rem; color: var(--text-dark); opacity: 0.6; font-style: italic;">No sizes added yet. Click "Add Size" below.</p>';
+        }
+        html += '</div>';
+        html += '<div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">';
+        html += '<button type="button" onclick="adminUI.addRecipeProductSizeRow()" class="btn btn-secondary" style="flex: 0 0 auto;">+ Add Size</button>';
+        html += '<button type="button" onclick="adminUI.saveRecipeProductSizes(\'' + productId + '\')" class="btn" style="flex: 0 0 auto;">💾 Save Sizes</button>';
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        // Add size selector if product has sizes
+        if (productSizes && productSizes.length > 0) {
+            html += '<div style="margin-bottom: 1.5rem; padding: 1.25rem; background: linear-gradient(135deg, var(--cream) 0%, rgba(139, 111, 71, 0.05) 100%); border-radius: 8px; border: 2px solid rgba(139, 111, 71, 0.3); box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
+            html += '<label style="display: block; font-weight: 600; color: var(--deep-brown); margin-bottom: 0.75rem; font-size: 1.1rem;">📏 Select Size to Edit Recipe:</label>';
+            html += '<select id="recipe-size-selector" style="width: 100%; padding: 0.75rem; font-size: 1rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; background: white; cursor: pointer; font-weight: 500;">';
+            
+            // Default option with indicator
+            const defaultIndicator = defaultRecipeExists ? ' ✓' : '';
+            html += `<option value="">Default Recipe (applies to all sizes unless overridden)${defaultIndicator}</option>`;
+            
+            // Size options with indicators
+            productSizes.forEach(size => {
+                const sizeRecipe = existingRecipes[size.id];
+                const hasRecipe = sizeRecipe && sizeRecipe.ingredient_count > 0;
+                const indicator = hasRecipe ? ' ✓' : '';
+                html += `<option value="${size.id}">${size.size_name} (${size.size_oz} oz)${indicator}</option>`;
+            });
+            
+            html += '</select>';
+            html += '<div id="recipe-size-display" style="margin-top: 0.75rem; font-size: 0.95rem; color: var(--deep-brown); font-weight: 500; padding: 0.75rem; background: rgba(139, 111, 71, 0.15); border-radius: 4px; border-left: 4px solid var(--accent-orange);">✓ Editing default recipe (applies to all sizes unless overridden)</div>';
+            html += '<div style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-dark); opacity: 0.8; padding: 0.5rem; background: rgba(139, 111, 71, 0.05); border-radius: 4px;">💡 <strong>Tip:</strong> Select a size from the dropdown above to create/edit a size-specific recipe. If no size-specific recipe exists, the default recipe will be used for that size. Checkmarks (✓) indicate existing recipes.</div>';
+            html += '</div>';
+        } else {
+            // Show message if product should have sizes but none are found
+            html += '<div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(255, 193, 7, 0.1); border-radius: 4px; border-left: 4px solid #ffc107; font-size: 0.9rem; color: var(--text-dark);">';
+            html += 'ℹ️ This product does not have size options. Use "Manage Size Options" above to add sizes, or the recipe will apply to the product as a whole.';
+            html += '</div>';
+        }
+        
+        // Add Recipe List section (shows only ingredients with amount > 0)
+        html += '<div id="recipe-list-section" style="margin-bottom: 1.5rem; padding: 1.25rem; background: linear-gradient(135deg, rgba(76, 175, 80, 0.1) 0%, rgba(76, 175, 80, 0.05) 100%); border-radius: 8px; border: 2px solid rgba(76, 175, 80, 0.3); box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
+        html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">';
+        html += '<label style="font-weight: 600; color: var(--deep-brown); font-size: 1.1rem;">📝 Current Recipe:</label>';
+        html += '<span id="recipe-list-count" style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.7;">0 ingredients</span>';
+        html += '</div>';
+        html += '<div id="recipe-list-container" style="min-height: 60px; max-height: 200px; overflow-y: auto; padding: 0.75rem; background: white; border-radius: 6px; border: 1px solid rgba(76, 175, 80, 0.2);">';
+        html += '<p style="font-size: 0.9rem; color: var(--text-dark); opacity: 0.6; font-style: italic; text-align: center; padding: 1rem 0;">No ingredients added yet. Increase ingredient amounts above to add them to the recipe.</p>';
+        html += '</div>';
+        html += '</div>';
+        
+        html += '<div style="max-height: 60vh; overflow-y: auto;">';
         Object.values(categories).forEach(category => {
             if (category.ingredients.length === 0) return;
             
@@ -1524,7 +2195,7 @@ class AdminUI {
                         <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                                 <label style="font-size: 0.85rem; color: var(--deep-brown);">Amount:</label>
-                                <input type="number" id="ing-${ing.id}-amount" step="0.1" min="0" value="${di?.default_amount || 0}" style="width: 70px; padding: 0.4rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; font-size: 0.9rem;">
+                                <input type="number" id="ing-${ing.id}-amount" step="0.1" min="0" value="${di?.default_amount || 0}" style="width: 70px; padding: 0.4rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; font-size: 0.9rem;" onchange="adminUI.updateRecipeList()" oninput="adminUI.updateRecipeList()">
                             </div>
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                                 <label style="font-size: 0.85rem; color: var(--deep-brown);">Unit:</label>
@@ -1542,10 +2213,19 @@ class AdminUI {
                                 <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;">
                                     <input type="checkbox" id="ing-${ing.id}-addable" ${di?.is_addable !== false ? 'checked' : ''} style="margin-right: 0.25rem;"> Addable
                                 </label>
-                                <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;" title="If checked, ingredient uses default price. If unchecked, ingredient is included in base drink price (no per-unit charge).">
-                                    <input type="checkbox" id="ing-${ing.id}-use-default-price" ${di?.use_default_price === false ? '' : 'checked'} style="margin-right: 0.25rem;"> Use Default Price
+                                <label style="font-size: 0.85rem; color: var(--deep-brown); cursor: pointer;" title="If checked, ingredient uses default price. If unchecked, you can set a custom price or include in base price.">
+                                    <input type="checkbox" id="ing-${ing.id}-use-default-price" ${di?.use_default_price === false ? '' : 'checked'} style="margin-right: 0.25rem;" onchange="adminUI.toggleCustomPrice('${ing.id}')"> Use Default Price
                                 </label>
                             </div>
+                        </div>
+                        <!-- Custom Price Field (shown when Use Default Price is unchecked) -->
+                        <div id="ing-${ing.id}-custom-price-container" style="display: ${di?.use_default_price === false ? 'flex' : 'none'}; align-items: center; gap: 0.5rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(139, 111, 71, 0.2);">
+                            <label style="font-size: 0.85rem; color: var(--deep-brown); font-weight: 500;">Custom Price per ${ing.unit_type === 'shots' ? 'shot' : ing.unit_type === 'pumps' ? 'pump' : ing.unit_type}:</label>
+                            <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                <span style="font-size: 0.9rem; color: var(--deep-brown);">$</span>
+                                <input type="number" id="ing-${ing.id}-custom-price" step="0.01" min="0" value="${di?.custom_price !== null && di?.custom_price !== undefined ? parseFloat(di.custom_price).toFixed(2) : ''}" placeholder="0.00" style="width: 80px; padding: 0.4rem; border: 2px solid rgba(139, 111, 71, 0.3); border-radius: 4px; font-size: 0.9rem;">
+                            </div>
+                            <span style="font-size: 0.8rem; color: var(--text-dark); opacity: 0.7; font-style: italic;">Leave blank to include in base price (no charge)</span>
                         </div>
                     </div>
                 `;
@@ -1583,6 +2263,8 @@ class AdminUI {
             const removable = document.getElementById(`ing-${ing.id}-removable`)?.checked !== false;
             const addable = document.getElementById(`ing-${ing.id}-addable`)?.checked !== false;
             const useDefaultPrice = document.getElementById(`ing-${ing.id}-use-default-price`)?.checked !== false;
+            const customPriceValue = document.getElementById(`ing-${ing.id}-custom-price`)?.value?.trim();
+            const customPrice = customPriceValue && customPriceValue !== '' ? parseFloat(customPriceValue) : null;
 
             if (amount > 0 || required) {
                 // Ensure unit_type is null if empty or invalid, not the string "null"
@@ -1595,16 +2277,30 @@ class AdminUI {
                     is_required: required,
                     is_removable: removable,
                     is_addable: addable,
-                    use_default_price: useDefaultPrice
+                    use_default_price: useDefaultPrice,
+                    custom_price: customPrice // Custom price (null if not set, means included in base price)
                 });
             }
         });
 
-        const result = await adminManager.setDrinkIngredients(this.editingDrinkIngredients, ingredients);
+        // Get selected size ID if size selector exists
+        const sizeSelector = document.getElementById('recipe-size-selector');
+        const sizeId = sizeSelector ? (sizeSelector.value || null) : null;
+        
+        const result = await adminManager.setDrinkIngredients(this.editingDrinkIngredients, ingredients, sizeId);
         if (result.success) {
-            document.querySelector('.admin-modal-overlay')?.remove();
-            errorDialog.showSuccess('Drink recipe updated successfully!', 'Success');
-            this.editingDrinkIngredients = null;
+            // Refresh recipe summary before closing
+            const sizesResult = await adminManager.getProductSizes(this.editingDrinkIngredients);
+            const productSizes = sizesResult.success ? sizesResult.sizes : [];
+            await this.updateRecipeSummary(this.editingDrinkIngredients, productSizes);
+            
+            const sizeName = sizeId && sizeSelector ? sizeSelector.options[sizeSelector.selectedIndex].text : 'default';
+            errorDialog.showSuccess(`Drink recipe updated successfully for ${sizeName}!`, 'Success');
+            
+            // Don't close modal - let user see the updated summary and continue editing if needed
+            // document.querySelector('.admin-modal-overlay')?.remove();
+            // this.editingDrinkIngredients = null;
+            // this.selectedRecipeSizeId = null;
         } else {
             errorDiv.textContent = result.error || 'Error saving drink recipe';
             errorDiv.style.display = 'block';
@@ -2806,6 +3502,24 @@ class AdminUI {
     }
 }
 
-// Global admin UI instance
-const adminUI = new AdminUI();
+// Global admin UI instance - explicitly assign to window to ensure it's global
+try {
+    window.adminUI = new AdminUI();
+    // Also assign to adminUI for backward compatibility
+    const adminUI = window.adminUI;
+    console.log('AdminUI instance created successfully');
+} catch (error) {
+    console.error('Error creating AdminUI instance:', error);
+    console.error('Error stack:', error.stack);
+    // Create a minimal fallback object to prevent further errors
+    window.adminUI = {
+        init: async () => {
+            const container = document.getElementById('admin-content');
+            if (container) {
+                container.innerHTML = `<p style="text-align: center; color: var(--auburn);">Error: Failed to initialize Admin UI. ${error.message}<br><br>Check the browser console for details.</p>`;
+            }
+        }
+    };
+    const adminUI = window.adminUI;
+}
 

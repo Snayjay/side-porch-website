@@ -974,7 +974,87 @@ class AdminManager {
     }
 
     // Drink-ingredient relationship management
-    async getDrinkIngredients(productId) {
+    async getDrinkIngredients(productId, sizeId = null) {
+        const client = getSupabaseClient();
+        if (!client) {
+            throw new Error('Supabase not configured');
+        }
+
+        const shopId = configManager.getShopId();
+        if (!shopId) {
+            return { success: false, error: 'Shop ID not configured' };
+        }
+
+        try {
+            let query = client
+                .from('drink_ingredients')
+                .select(`
+                    id,
+                    product_id,
+                    ingredient_id,
+                    size_id,
+                    default_amount,
+                    unit_type,
+                    is_required,
+                    is_removable,
+                    is_addable,
+                    use_default_price,
+                    custom_price,
+                    ingredient:ingredients(*)
+                `)
+                .eq('product_id', productId)
+                .eq('shop_id', shopId);
+
+            // If sizeId is provided, prioritize size-specific recipes
+            // Otherwise, get product-level defaults (size_id IS NULL)
+            if (sizeId) {
+                // First try to get size-specific recipes
+                query = query.eq('size_id', sizeId);
+            } else {
+                // Get product-level defaults (size_id IS NULL)
+                query = query.is('size_id', null);
+            }
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+            
+            // If sizeId was provided but no size-specific recipes found, fall back to product-level defaults
+            if (sizeId && (!data || data.length === 0)) {
+                const { data: fallbackData, error: fallbackError } = await client
+                    .from('drink_ingredients')
+                    .select(`
+                        id,
+                        product_id,
+                        ingredient_id,
+                        size_id,
+                        default_amount,
+                        unit_type,
+                        is_required,
+                        is_removable,
+                        is_addable,
+                        use_default_price,
+                        custom_price,
+                        ingredient:ingredients(*)
+                    `)
+                    .eq('product_id', productId)
+                    .eq('shop_id', shopId)
+                    .is('size_id', null);
+                
+                if (!fallbackError) {
+                    return { success: true, drinkIngredients: fallbackData || [] };
+                }
+            }
+            
+            return { success: true, drinkIngredients: data || [] };
+        } catch (error) {
+            console.error('Get drink ingredients error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    // Get all recipes for a product (all sizes + default)
+    async getAllDrinkRecipes(productId) {
         const client = getSupabaseClient();
         if (!client) {
             throw new Error('Supabase not configured');
@@ -992,26 +1072,79 @@ class AdminManager {
                     id,
                     product_id,
                     ingredient_id,
-                    default_amount,
-                    unit_type,
-                    is_required,
-                    is_removable,
-                    is_addable,
-                    use_default_price,
-                    ingredient:ingredients(*)
+                    size_id,
+                    product_sizes!drink_ingredients_size_id_fkey(size_name, size_oz)
                 `)
                 .eq('product_id', productId)
                 .eq('shop_id', shopId);
 
             if (error) throw error;
-            return { success: true, drinkIngredients: data || [] };
+            
+            // Group by size_id to see which sizes have recipes
+            const recipesBySize = {};
+            (data || []).forEach(di => {
+                const sizeKey = di.size_id || 'default';
+                if (!recipesBySize[sizeKey]) {
+                    const sizeInfo = di.size_id ? (di.product_sizes || null) : null;
+                    recipesBySize[sizeKey] = {
+                        size_id: di.size_id,
+                        size_name: di.size_id ? (sizeInfo?.size_name || 'Unknown') : 'Default',
+                        size_oz: di.size_id ? (sizeInfo?.size_oz || null) : null,
+                        ingredient_count: 0
+                    };
+                }
+                recipesBySize[sizeKey].ingredient_count++;
+            });
+            
+            return { success: true, recipesBySize: recipesBySize };
         } catch (error) {
-            console.error('Get drink ingredients error:', error);
-            return { success: false, error: error.message };
+            console.error('Get all drink recipes error:', error);
+            // If foreign key join fails, try without join
+            try {
+                const { data: simpleData, error: simpleError } = await client
+                    .from('drink_ingredients')
+                    .select('id, product_id, ingredient_id, size_id')
+                    .eq('product_id', productId)
+                    .eq('shop_id', shopId);
+                
+                if (simpleError) throw simpleError;
+                
+                // Get sizes separately
+                const { data: sizesData } = await client
+                    .from('product_sizes')
+                    .select('id, size_name, size_oz')
+                    .eq('product_id', productId)
+                    .eq('shop_id', shopId);
+                
+                const sizeMap = {};
+                (sizesData || []).forEach(size => {
+                    sizeMap[size.id] = size;
+                });
+                
+                const recipesBySize = {};
+                (simpleData || []).forEach(di => {
+                    const sizeKey = di.size_id || 'default';
+                    if (!recipesBySize[sizeKey]) {
+                        const sizeInfo = di.size_id ? sizeMap[di.size_id] : null;
+                        recipesBySize[sizeKey] = {
+                            size_id: di.size_id,
+                            size_name: di.size_id ? (sizeInfo?.size_name || 'Unknown') : 'Default',
+                            size_oz: di.size_id ? (sizeInfo?.size_oz || null) : null,
+                            ingredient_count: 0
+                        };
+                    }
+                    recipesBySize[sizeKey].ingredient_count++;
+                });
+                
+                return { success: true, recipesBySize: recipesBySize };
+            } catch (fallbackError) {
+                console.error('Get all drink recipes fallback error:', fallbackError);
+                return { success: false, error: fallbackError.message };
+            }
         }
     }
 
-    async setDrinkIngredients(productId, ingredients) {
+    async setDrinkIngredients(productId, ingredients, sizeId = null) {
         const client = getSupabaseClient();
         if (!client) {
             throw new Error('Supabase not configured');
@@ -1075,10 +1208,19 @@ class AdminManager {
             console.log('Session verified for drink ingredients update');
 
             // Get existing ingredients to determine what to update vs insert vs delete
-            const { data: existingIngredients, error: fetchError } = await client
+            // Filter by size_id if provided, otherwise get product-level defaults
+            let existingQuery = client
                 .from('drink_ingredients')
-                .select('ingredient_id, default_amount, unit_type, is_required, is_removable, is_addable, use_default_price')
+                .select('ingredient_id, size_id, default_amount, unit_type, is_required, is_removable, is_addable, use_default_price')
                 .eq('product_id', productId);
+            
+            if (sizeId) {
+                existingQuery = existingQuery.eq('size_id', sizeId);
+            } else {
+                existingQuery = existingQuery.is('size_id', null);
+            }
+            
+            const { data: existingIngredients, error: fetchError } = await existingQuery;
 
             if (fetchError) {
                 console.error('Error fetching existing ingredients:', fetchError);
@@ -1087,6 +1229,7 @@ class AdminManager {
 
             const existingIngredientMap = new Map();
             existingIngredients?.forEach(ei => {
+                // Use ingredient_id as key since we're filtering by size_id already
                 existingIngredientMap.set(ei.ingredient_id, ei);
             });
 
@@ -1105,13 +1248,22 @@ class AdminManager {
             const existingIngredientIds = new Set(existingIngredientMap.keys());
 
             // Delete ingredients that are no longer in the recipe
+            // Only delete recipes for the specific size (or product-level if sizeId is null)
             const ingredientsToDelete = Array.from(existingIngredientIds).filter(id => !newIngredientIds.has(id));
             if (ingredientsToDelete.length > 0) {
-                const { error: deleteError } = await client
+                let deleteQuery = client
                     .from('drink_ingredients')
                     .delete()
                     .eq('product_id', productId)
                     .in('ingredient_id', ingredientsToDelete);
+                
+                if (sizeId) {
+                    deleteQuery = deleteQuery.eq('size_id', sizeId);
+                } else {
+                    deleteQuery = deleteQuery.is('size_id', null);
+                }
+                
+                const { error: deleteError } = await deleteQuery;
 
                 if (deleteError) {
                     console.error('Delete drink ingredients error:', deleteError);
@@ -1149,30 +1301,40 @@ class AdminManager {
                     product_id: productId,
                     shop_id: shopId,
                     ingredient_id: ing.ingredient_id,
+                    size_id: sizeId || null,  // Set size_id if provided, otherwise null for product-level
                     default_amount: parseFloat(ing.default_amount || 0),
                     unit_type: (ing.unit_type && ing.unit_type !== 'null' && ing.unit_type !== 'undefined') ? ing.unit_type : null,  // Save the selected unit type for this recipe
                     is_required: ing.is_required || false,
                     is_removable: ing.is_removable !== undefined ? ing.is_removable : true,
                     is_addable: ing.is_addable !== undefined ? ing.is_addable : true,
-                    use_default_price: ing.use_default_price !== undefined ? ing.use_default_price : true
+                    use_default_price: ing.use_default_price !== undefined ? ing.use_default_price : true,
+                    custom_price: (ing.custom_price !== null && ing.custom_price !== undefined) ? parseFloat(ing.custom_price) : null  // Custom price (null if not set)
                 };
 
                 if (existingIngredientMap.has(ing.ingredient_id)) {
                     // Update existing ingredient
-                    updates.push(
-                        client
-                            .from('drink_ingredients')
-                            .update({
-                                default_amount: ingredientData.default_amount,
-                                unit_type: ingredientData.unit_type,
-                                is_required: ingredientData.is_required,
-                                is_removable: ingredientData.is_removable,
-                                is_addable: ingredientData.is_addable,
-                                use_default_price: ingredientData.use_default_price
-                            })
-                            .eq('product_id', productId)
-                            .eq('ingredient_id', ing.ingredient_id)
-                    );
+                    let updateQuery = client
+                        .from('drink_ingredients')
+                        .update({
+                            default_amount: ingredientData.default_amount,
+                            unit_type: ingredientData.unit_type,
+                            is_required: ingredientData.is_required,
+                            is_removable: ingredientData.is_removable,
+                            is_addable: ingredientData.is_addable,
+                            use_default_price: ingredientData.use_default_price,
+                            custom_price: ingredientData.custom_price
+                        })
+                        .eq('product_id', productId)
+                        .eq('ingredient_id', ing.ingredient_id);
+                    
+                    // Filter by size_id for update
+                    if (sizeId) {
+                        updateQuery = updateQuery.eq('size_id', sizeId);
+                    } else {
+                        updateQuery = updateQuery.is('size_id', null);
+                    }
+                    
+                    updates.push(updateQuery);
                 } else {
                     // Insert new ingredient
                     inserts.push(ingredientData);
@@ -1211,11 +1373,19 @@ class AdminManager {
                 }
             }
 
-            // Fetch all ingredients to return
-            const { data: allIngredients, error: fetchAllError } = await client
+            // Fetch all ingredients to return (for the specific size or product-level)
+            let fetchQuery = client
                 .from('drink_ingredients')
                 .select()
                 .eq('product_id', productId);
+            
+            if (sizeId) {
+                fetchQuery = fetchQuery.eq('size_id', sizeId);
+            } else {
+                fetchQuery = fetchQuery.is('size_id', null);
+            }
+            
+            const { data: allIngredients, error: fetchAllError } = await fetchQuery;
 
             if (fetchAllError) {
                 console.error('Error fetching all ingredients:', fetchAllError);
